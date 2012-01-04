@@ -1,5 +1,8 @@
+Author: Dan Bradley <dan@hep.wisc.edu>
+
 This repository is for integration work required to support access to
-CVMFS in parrot.
+CVMFS in parrot.  All modifications made in this repository to CVMFS
+and cctools are subject to the license in cctools/COPYING (GPLv2).
 
 The sourcecode tarballs for CVMFS and parrot were downloaded and
 checked into the 'upstream' branch.  The following versions are
@@ -8,10 +11,24 @@ currently used:
 cvmfs-2.0.4
 cctools-1644
 
-So to see the development that has been done, compare the master
+To see the development that has been done, compare the master
 branch to the upstream branch:
 
 git diff upstream..master -- cctools
 git diff upstream..master -- cvmfs
 
-Dan Bradley <dan@hep.wisc.edu>
+To build:
+
+cd cvmfs
+./configure --disable-server --enable-sqlite3-builtin --enable-libcurl-builtin
+make
+
+cd ../cctools
+./configure --without-system-sand --without-system-allpairs --without-system-wavefront --without-system-makeflow --with-cvmfs-path `pwd`/../cvmfs
+make
+
+
+To test:
+
+cd parrot/src
+./parrot_run cat /cvmfs/cms.hep.wisc.edu/osg/app/etc/grid3-locations.txt
