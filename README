@@ -1,4 +1,17 @@
 This repository is for integration work required to support access to
 CVMFS in parrot.
 
+The sourcecode tarballs for CVMFS and parrot were downloaded and
+checked into the 'upstream' branch.  The following versions are
+currently used:
+
+cvmfs-2.0.4
+cctools-1644
+
+So to see the development that has been done, compare the master
+branch to the upstream branch:
+
+git diff upstream..master -- cctools
+git diff upstream..master -- cvmfs
+
 Dan Bradley <dan@hep.wisc.edu>
