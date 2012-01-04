@@ -386,7 +386,7 @@ void endianTest(int *endian_ness)
 
 #define BUFFER_SIZE 1048576
 
-int sha1_file(const char *filename, unsigned char digest[20])
+int dttools_sha1_file(const char *filename, unsigned char digest[20])
 {
 	FILE *file;
 	sha1_context_t context;
@@ -420,7 +420,7 @@ void sha1_buffer(const char *buffer, int length, unsigned char digest[20])
 	sha1_final(digest, &context);
 }
 
-const char *sha1_string(unsigned char digest[20])
+const char *dttools_sha1_string(unsigned char digest[20])
 {
 	static char str[41];
 	int i;

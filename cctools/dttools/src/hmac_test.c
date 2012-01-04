@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 
 	// Test Str 1
 	hmac_sha1("Hi There", 8, "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b", 20, sha1_digest);
-	string = sha1_string(sha1_digest);
+	string = dttools_sha1_string(sha1_digest);
 	if(verbose) {
 		printf("SHA1 Test 1 ref: \t0x%s\n", sha1_ref1);
 		printf("SHA1 Test 1 digest:\t0x%s\n", string);
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
 	}
 
 	hmac_sha1("what do ya want for nothing?", 28, "Jefe", 4, sha1_digest);
-	string = sha1_string(sha1_digest);
+	string = dttools_sha1_string(sha1_digest);
 	if(verbose) {
 		printf("\n");
 		printf("SHA1 Test 2 ref: \t0x%s\n", sha1_ref2);
@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 	memset(data, '\xDD', 50);
 	data[50] = 0;
 	hmac_sha1(data, 50, "\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA\xAA", 20, sha1_digest);
-	string = sha1_string(sha1_digest);
+	string = dttools_sha1_string(sha1_digest);
 	if(verbose) {
 		printf("\n");
 		printf("SHA1 Test 3 ref: \t0x%s\n", sha1_ref3);
