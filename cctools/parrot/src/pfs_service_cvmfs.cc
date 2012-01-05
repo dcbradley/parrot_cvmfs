@@ -14,6 +14,7 @@ extern "C" {
 #include "xmalloc.h"
 #include "macros.h"
 #include "sha1.h"
+#include "stringtools.h"
 }
 #include <unistd.h>
 #include <string.h>
@@ -26,15 +27,11 @@ extern "C" {
 #include <sys/statfs.h>
 #include <time.h>
 #include <assert.h>
-#define CVMFS_PORT 80
-#define CVMFS_ARGS_MAX 10
 extern int pfs_master_timeout;
 extern int pfs_checksum_files;
 extern char pfs_temp_dir[];
 extern struct file_cache *pfs_file_cache;
 
-extern void pfs_abort();
-extern int pfs_cache_invalidate(pfs_name * name);
 
 static struct cvmfs_filesystem *cvmfs_filesystem_list = 0;
 static struct cvmfs_filesystem *cvmfs_active_filesystem = 0;
@@ -51,8 +48,7 @@ struct cvmfs_filesystem {
 	char path[PFS_PATH_MAX];
 	struct cvmfs_dirent *root;
 	struct cvmfs_filesystem *next;
-	char *argv[CVMFS_ARGS_MAX];
-	int argc;
+	char *cvmfs_options;
 };
 
 /*
@@ -148,7 +144,10 @@ bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 			cvmfs_fini();
 			cvmfs_active_filesystem = NULL;
 		}
-		int rc = cvmfs_init(f->argc, f->argv);
+
+		debug(D_GROW, "Initializing libcvmfs with the following options: %s", f->cvmfs_options);
+
+		int rc = cvmfs_init(f->cvmfs_options);
 		if(rc != 0) {
 			return false;
 		}
@@ -168,15 +167,30 @@ struct cvmfs_filesystem *cvmfs_filesystem_create(const char *hostport, const cha
 	strcpy(f->hostport, hostport);
 	strcpy(f->path, path);
 
-	f->argv[f->argc++] = strdup("unused");
-	f->argv[f->argc++] = strdup("-o");
-	f->argv[f->argc++] =
-		strdup
-		("fsname=cvmfs2,ro,nodev,kernel_cache,auto_cache,uid=275,gid=275,cachedir=/scratch/dan/cache,entry_timeout=60,attr_timeout=60,negative_timeout=60,use_ino,proxies=DIRECT,repo_name=cms.hep.wisc.edu,timeout=5,timeout_direct=10,ro,syslog_level=1,force_signing,pubkey=/etc/cvmfs/keys/cms.hep.wisc.edu.pub");
-	f->argv[f->argc++] = strdup("http://cvmfs01.hep.wisc.edu/cvmfs/cms.hep.wisc.edu");
-	f->argv[f->argc] = NULL;
+	char const *user_options = "force_signing,pubkey=/etc/cvmfs/keys/cms.hep.wisc.edu.pub,url=http://cvmfs01.hep.wisc.edu/cvmfs/cms.hep.wisc.edu";
 
-	assert(f->argc < CVMFS_ARGS_MAX);
+	char *repo_name = strdup(f->hostport);
+
+	// trim off the port part in repo_name
+	char *port_pos = strrchr(repo_name,':');
+	if( port_pos ) {
+		*port_pos = '\0';
+	}
+
+	char *proxy = getenv("HTTP_PROXY");
+	if( !proxy ) {
+		proxy = "DIRECT";
+	}
+
+	f->cvmfs_options = (char *)malloc(strlen(user_options)+2*strlen(repo_name)+strlen(pfs_temp_dir)+strlen(proxy)+100);
+	sprintf(f->cvmfs_options,
+			"repo_name=%s,cachedir=%s/cvmfs/%s,timeout=%d,timeout_direct=%d,proxies=%s,%s",
+			repo_name,
+			pfs_temp_dir, repo_name,
+			pfs_master_timeout,
+			pfs_master_timeout,
+			proxy,
+			user_options);
 
 	return f;
 }
@@ -191,10 +205,7 @@ void cvmfs_filesystem_delete(struct cvmfs_filesystem *f)
 		return;
 	cvmfs_filesystem_delete(f->next);
 
-	int i;
-	for(i = 0; i < f->argc; i++) {
-		free(f->argv[i]);
-	}
+	free(f->cvmfs_options);
 
 	if(cvmfs_active_filesystem == f) {
 		cvmfs_fini();
@@ -252,7 +263,7 @@ cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result
 
 	strcpy(path, name->rest);
 	while(1) {
-		f = cvmfs_filesystem_create(name->hostport, path);
+		f = cvmfs_filesystem_create(name->hostport, "/");
 		if(f) {
 			f->next = cvmfs_filesystem_list;
 			cvmfs_filesystem_list = f;
@@ -363,7 +374,7 @@ class pfs_file_cvmfs:public pfs_file {
 class pfs_service_cvmfs:public pfs_service {
       public:
 	virtual int get_default_port() {
-		return CVMFS_PORT;
+		return 0;
 	} virtual int is_seekable() {
 		// CVMFS has its own cache, and the file descriptors returned
 		// by cvmfs_open are just handles to whole files in the CVMFS

@@ -548,7 +548,7 @@ if [ $config_cvmfs_path != no ] && check_file ${cvmfs_path}/cvmfs/src/libcvmfs.h
 then
 	ccflags="${ccflags} -I${cvmfs_path}/cvmfs/src -DHAS_CVMFS"
 
-	for library in cvmfs/src/cvmfs sqlite3/src/sqlite3 libcurl/src/lib/.libs/curl libfuse/src/lib/.libs/fuse jemalloc/src/lib/jemalloc
+	for library in cvmfs/src/cvmfs sqlite3/src/sqlite3 libcurl/src/lib/.libs/curl
 	do
 		lib_path=${cvmfs_path}/`dirname ${library}`
                 library=`basename ${library}`
