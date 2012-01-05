@@ -30,5 +30,7 @@ make
 
 To test:
 
-cd parrot/src
-./parrot_run cat /cvmfs/cms.hep.wisc.edu/osg/app/etc/grid3-locations.txt
+. test/setup.sh
+cd cctools/parrot/src
+./parrot_run ls -l /cvmfs/cms.hep.wisc.edu
+./parrot_run ls -l /cvmfs/cms.cern.ch
