@@ -5,8 +5,13 @@ extern "C" {
 
 /* Initialize the CVMFS library and attach the specified remote
  * repository.
+ *
+ * See libcvmfs usage() for possible options.
+ *
+ * @param[in] options, option1,option2,...
+ * \return 0 on success
  */
-int cvmfs_init(int argc, char *argv[]);
+int cvmfs_init(char const *options);
 
 /* Shut down the CVMFS library and release all resources.
  */

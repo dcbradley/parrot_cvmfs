@@ -73,7 +73,6 @@ libcvmfs_a_SOURCES += smalloc.h smalloc.c \
    lru.h lru.cc \
    hash.h hash.cc \
    cache.h cache.cc \
-   talk.h talk.cc \
    monitor.h monitor.cc \
    util.cc util.h \
    zlib-duplex.h compression.h compression.c \
