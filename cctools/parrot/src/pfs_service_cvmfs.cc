@@ -14,7 +14,6 @@ extern "C" {
 #include "xmalloc.h"
 #include "macros.h"
 #include "sha1.h"
-#include "stringtools.h"
 }
 #include <unistd.h>
 #include <string.h>
@@ -156,26 +155,11 @@ bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 	return true;
 }
 
-/*
-Search for a cvmfs filesystem rooted at the given host and path.
-On failure, return zero.
-*/
-
-struct cvmfs_filesystem *cvmfs_filesystem_create(const char *hostport, const char *path)
+struct cvmfs_filesystem *cvmfs_filesystem_create(const char *repo_name, const char *path, const char *user_options)
 {
 	struct cvmfs_filesystem *f = (struct cvmfs_filesystem *) xxmalloc(sizeof(*f));
-	strcpy(f->hostport, hostport);
+	sprintf(f->hostport,"%s:0",repo_name);
 	strcpy(f->path, path);
-
-	char const *user_options = "force_signing,pubkey=/etc/cvmfs/keys/cms.hep.wisc.edu.pub,url=http://cvmfs01.hep.wisc.edu/cvmfs/cms.hep.wisc.edu";
-
-	char *repo_name = strdup(f->hostport);
-
-	// trim off the port part in repo_name
-	char *port_pos = strrchr(repo_name,':');
-	if( port_pos ) {
-		*port_pos = '\0';
-	}
 
 	char *proxy = getenv("HTTP_PROXY");
 	if( !proxy ) {
@@ -192,7 +176,78 @@ struct cvmfs_filesystem *cvmfs_filesystem_create(const char *hostport, const cha
 			proxy,
 			user_options);
 
+	debug(D_GROW, "cvmfs filesystem configured %s with repo path %s and options %s", repo_name, f->path, f->cvmfs_options);
+
 	return f;
+}
+
+/* Read configuration for CVMFS repositories accessible to parrot.
+ * Expected format of the configuration string:
+ *   repo_name/subpath:cvmfs_options repo_name2/subpath:cvmfs_options ...
+ *
+ * The subpath is optional.  Literal spaces in the configuration must
+ * be escaped with a backslash.
+ *
+ * Example:
+ * cms.cern.ch:force_signing,pubkey=/path/to/cern.ch.pub,url=http://cvmfs-stratum-one.cern.ch/opt/cms
+ */
+static void cvmfs_read_config()
+{
+	char *cvmfs_options = getenv("PARROT_CVMFS_REPO");
+	if( !cvmfs_options ) {
+		return;
+	}
+
+	while( isspace(*cvmfs_options) ) {
+		cvmfs_options++;
+	}
+
+	while( *cvmfs_options ) {
+		char *start = cvmfs_options;
+		for(; *cvmfs_options && !isspace(*cvmfs_options); cvmfs_options++ ) {
+			if( *cvmfs_options == '\\' ) {
+				cvmfs_options++;
+				if( *cvmfs_options == '\0' ) break;
+			}
+		}
+
+		char *repo = strdup(start);
+		size_t pos = strcspn(repo,"/:");
+		repo[pos] = '\0';
+
+		char *path = NULL;
+		start += pos;
+		if( *start == '/' ) {
+			path = strdup(start);
+			pos = strcspn(path,":");
+			path[pos] = '\0';
+			start += pos;
+		}
+		else {
+			path = strdup("/");
+		}
+
+		char *options = NULL;
+		if( *start == ':' ) {
+			start++;
+			options = strdup(start);
+			options[cvmfs_options-start] = '\0';
+		}
+
+		cvmfs_filesystem *f = cvmfs_filesystem_create(repo,path,options);
+		if(f) {
+			f->next = cvmfs_filesystem_list;
+			cvmfs_filesystem_list = f;
+		}
+
+		free(repo);
+		free(path);
+		free(options);
+
+		while( isspace(*cvmfs_options) ) {
+			cvmfs_options++;
+		}
+	}
 }
 
 /*
@@ -230,9 +285,7 @@ void cvmfs_filesystem_flush_all()
 cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result)
 {
 	struct cvmfs_filesystem *f;
-	char path[PFS_PATH_MAX];
 	const char *subpath;
-	char *s;
 
 	debug(D_GROW, "cvmfs lookup_filesystem(%s,%s)", name->hostport, name->rest);
 
@@ -240,6 +293,10 @@ cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result
 		debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->hostport, name->rest);
 		errno = ENOENT;
 		return 0;
+	}
+
+	if( !cvmfs_filesystem_list ) {
+		cvmfs_read_config();
 	}
 
 	for(f = cvmfs_filesystem_list; f; f = f->next) {
@@ -258,25 +315,6 @@ cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result
 			debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> %s,%s,%s", name->hostport, name->rest, f->hostport, f->path, subpath);
 			*subpath_result = subpath;
 			return f;
-		}
-	}
-
-	strcpy(path, name->rest);
-	while(1) {
-		f = cvmfs_filesystem_create(name->hostport, "/");
-		if(f) {
-			f->next = cvmfs_filesystem_list;
-			cvmfs_filesystem_list = f;
-			subpath = compare_path_prefix(f->path, name->rest);
-			*subpath_result = subpath;
-			debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> new fs %s,%s,%s", name->hostport, name->rest, f->hostport, f->path, subpath);
-			return f;
-		}
-		s = strrchr(path, '/');
-		if(s) {
-			*s = 0;
-		} else {
-			break;
 		}
 	}
 
