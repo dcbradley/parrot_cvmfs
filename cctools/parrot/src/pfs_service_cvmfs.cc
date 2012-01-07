@@ -43,7 +43,7 @@ rooted at cvmfs_filesystem_list
 */
 
 struct cvmfs_filesystem {
-	char hostport[PFS_PATH_MAX];
+	char host[PFS_PATH_MAX];
 	char path[PFS_PATH_MAX];
 	struct cvmfs_dirent *root;
 	struct cvmfs_filesystem *next;
@@ -158,12 +158,16 @@ bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 struct cvmfs_filesystem *cvmfs_filesystem_create(const char *repo_name, const char *path, const char *user_options)
 {
 	struct cvmfs_filesystem *f = (struct cvmfs_filesystem *) xxmalloc(sizeof(*f));
-	sprintf(f->hostport,"%s:0",repo_name);
+	strcpy(f->host, repo_name);
 	strcpy(f->path, path);
 
 	char *proxy = getenv("HTTP_PROXY");
 	if( !proxy ) {
 		proxy = "DIRECT";
+	}
+
+	if( !user_options ) {
+		user_options = "";
 	}
 
 	f->cvmfs_options = (char *)malloc(strlen(user_options)+2*strlen(repo_name)+strlen(pfs_temp_dir)+strlen(proxy)+100);
@@ -287,10 +291,10 @@ cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result
 	struct cvmfs_filesystem *f;
 	const char *subpath;
 
-	debug(D_GROW, "cvmfs lookup_filesystem(%s,%s)", name->hostport, name->rest);
+	debug(D_GROW, "cvmfs lookup_filesystem(%s,%s)", name->host, name->rest);
 
-	if(!name->hostport[0]) {
-		debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->hostport, name->rest);
+	if(!name->host[0]) {
+		debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
 		errno = ENOENT;
 		return 0;
 	}
@@ -300,25 +304,25 @@ cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result
 	}
 
 	for(f = cvmfs_filesystem_list; f; f = f->next) {
-		if(!strcmp(f->hostport, name->hostport)) {
+		if(!strcmp(f->host, name->host)) {
 			subpath = compare_path_prefix(f->path, name->rest);
 			if(!subpath) {
 				subpath = compare_path_prefix(name->rest, f->path);
 				if(subpath) {
-					debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->hostport, name->rest);
+					debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
 					errno = ENOENT;
 					return 0;
 				} else {
 					continue;
 				}
 			}
-			debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> %s,%s,%s", name->hostport, name->rest, f->hostport, f->path, subpath);
+			debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> %s,%s,%s", name->host, name->rest, f->host, f->path, subpath);
 			*subpath_result = subpath;
 			return f;
 		}
 	}
 
-	debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->hostport, name->rest);
+	debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
 	errno = ENOENT;
 	return 0;
 }
