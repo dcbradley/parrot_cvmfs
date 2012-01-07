@@ -6,7 +6,7 @@
  *
  *
  * Developed by Dan Bradley <dan@hep.wisc.edu> 2012 at University of
- * Wisconsin, based on the FUSE client cvmfs.cc.
+ * Wisconsin, largely based on the FUSE client cvmfs.cc.
  */
 
 #define _FILE_OFFSET_BITS 64
@@ -1222,8 +1222,8 @@ namespace cvmfs {
 using namespace cvmfs;
 
 /**
- * One single structure to contain the file system options.
- */ 
+ * Structure to parse the file system options.
+ */
 struct cvmfs_opts {
    unsigned timeout;
    unsigned timeout_direct;
@@ -1245,200 +1245,188 @@ struct cvmfs_opts {
    unsigned long  quota_limit;
    unsigned long  quota_threshold;
 
-    cvmfs_opts():
-        timeout(2),
-        timeout_direct(2),
-        max_ttl(0),
-        cachedir("/var/cache/cvmfs2/default"),
-        whitelist("/.cvmfswhitelist"),
-        pubkey("/etc/cvmfs/keys/cern.ch.pub"),
-        blacklist("/etc/cvmfs/blacklist"),
-        force_signing(false),
-        rebuild_cachedb(false),
-        nofiles(0),
-        syslog_level(3),
-        quota_limit(0),
-        quota_threshold(0) {}
-};
+   cvmfs_opts():
+      timeout(2),
+      timeout_direct(2),
+      max_ttl(0),
+      cachedir("/var/cache/cvmfs2/default"),
+      whitelist("/.cvmfswhitelist"),
+      pubkey("/etc/cvmfs/keys/cern.ch.pub"),
+      blacklist("/etc/cvmfs/blacklist"),
+      force_signing(false),
+      rebuild_cachedb(false),
+      nofiles(0),
+      syslog_level(3),
+      quota_limit(0),
+      quota_threshold(0) {}
 
-struct cvmfs_opts *cvmfs_opts;
+   int set_option(char const *name, char const *value, bool *var) {
+      if( *value != '\0' ) {
+         fprintf(stderr,"Option %s=%s contains a value when none was expected.\n",name,value);
+         return -1;
+      }
+      *var = true;
+      return 0;
+   }
 
+   int set_option(char const *name, char const *value, unsigned *var) {
+      unsigned v = 0;
+      int end = 0;
+      int rc = sscanf(value,"%u%n",&v,&end);
+      if( rc != 1 || value[end] != '\0' ) {
+         fprintf(stderr,"Invalid unsigned integer value for %s=%s\n",name,value);
+         return -1;
+      }
+      *var = v;
+      return 0;
+   }
 
-/** 
- * Display the usage message.
- * It will be done when we requested (the flag "-h" for example),
- * but also when an unidentified option is found.
- */
-static void usage() {
-   struct cvmfs_opts defaults;
-   fprintf(stderr,
-      "CernVM-FS version %s\n"
-      "Copyright (c) 2009- CERN\n"
-      "All rights reserved\n\n"
-      "Please visit http://cernvm.cern.ch/project/info for license details and author list.\n\n"
+   int set_option(char const *name, char const *value, unsigned long *var) {
+      unsigned v = 0;
+      int end = 0;
+      int rc = sscanf(value,"%ul%n",&v,&end);
+      if( rc != 1 || value[end] != '\0' ) {
+         fprintf(stderr,"Invalid unsigned long integer value for %s=%s\n",name,value);
+         return -1;
+      }
+      *var = v;
+      return 0;
+   }
 
-      "libcvmfs options are expected in the form: option1,option2,option3,...\n"
-      "Within an option, the characters , and \\ must be preceded by \\.\n\n"
+   int set_option(char const *name, char const *value, int *var) {
+      unsigned v = 0;
+      int end = 0;
+      int rc = sscanf(value,"%d%n",&v,&end);
+      if( rc != 1 || value[end] != '\0' ) {
+         fprintf(stderr,"Invalid integer value for %s=%s\n",name,value);
+         return -1;
+      }
+      *var = v;
+      return 0;
+   }
 
-      "options are:\n"
-      " url=REPOSITORY_URL      The URL of the CernVM-FS server(s): 'url1;url2;...'\n"
-      " timeout=SECONDS         Timeout for network operations (default is %d)\n"
-      " timeout_direct=SECONDS  Timeout for network operations without proxy (default is %d)\n"
-      " max_ttl=MINUTES         Maximum TTL for file catalogs (default: take from catalog)\n"
-      " cachedir=DIR            Where to store disk cache\n"
-      " proxies=HTTP_PROXIES    Set the HTTP proxy list, such as 'proxy1|proxy2;DIRECT'\n"
-      " tracefile=FILE          Trace FUSE opaerations into FILE\n"
-      " whitelist=URL           HTTP location of trusted catalog certificates (defaults is /.cvmfswhitelist)\n"
-      " pubkey=PEMFILE          Public RSA key that is used to verify the whitelist signature.\n"
-      " force_signing           Except only signed catalogs\n"
-      " rebuild_cachedb         Force rebuilding the quota cache db from cache directory\n"
-      " quota_limit=MB          Limit size of data chunks in cache. -1 Means unlimited.\n"
-      " quota_threshold=MB      Cleanup until size is <= threshold\n"
-      " nofiles=NUMBER          Set the maximum number of open files for CernVM-FS process (soft limit)\n"
-      " logfile=FILE            Logs all messages to FILE instead of stderr and daemonizes.\n"
-      "                         Makes only sense for the debug version\n"
-      " deep_mount=prefix       Path prefix if a repository is mounted on a nested catalog,\n"
-      "                         i.e. deep_mount=/software/15.0.1\n"
-      " repo_name=<repository>  Unique name of the mounted repository, e.g. atlas.cern.ch\n"
-      " blacklist=FILE          Local blacklist for invalid certificates.  Has precedence over the whitelist.\n"
-      "                         (Default is /etc/cvmfs/blacklist)\n"
-      " syslog_level=NUMBER     Sets the level used for syslog to DEBUG (1), INFO (2), or NOTICE (3).\n"
-      "                         Default is NOTICE.\n"
-      " Note: you cannot load files greater than quota_limit-quota_threshold\n",
-      PACKAGE_VERSION, defaults.timeout, defaults.timeout_direct
-   );
-}
+   int set_option(char const *name, char const *value, string *var) {
+      *var = value;
+      return 0;
+   }
 
+   int set_option(char const *name, char const *value)
+   {
+      #define CVMFS_OPT(var) if( strcmp(name,#var)==0 ) return set_option(name,value,&var)
+      CVMFS_OPT(url);
+      CVMFS_OPT(timeout);
+      CVMFS_OPT(timeout_direct);
+      CVMFS_OPT(max_ttl);
+      CVMFS_OPT(cachedir);
+      CVMFS_OPT(proxies);
+      CVMFS_OPT(tracefile);
+      CVMFS_OPT(force_signing);
+      CVMFS_OPT(whitelist);
+      CVMFS_OPT(pubkey);
+      CVMFS_OPT(logfile);
+      CVMFS_OPT(rebuild_cachedb);
+      CVMFS_OPT(quota_limit);
+      CVMFS_OPT(quota_threshold);
+      CVMFS_OPT(nofiles);
+      CVMFS_OPT(deep_mount);
+      CVMFS_OPT(repo_name);
+      CVMFS_OPT(blacklist);
+      CVMFS_OPT(syslog_level);
 
-static int cvmfs_set_option(char const *name, char const *value, bool *var)
-{
-    if( *value != '\0' ) {
-        fprintf(stderr,"Option %s=%s contains a value when none was expected.\n",name,value);
-        return -1;
-    }
-    *var = true;
-    return 0;
-}
+      if( strcmp(name,"help")==0 ) {
+         usage();
+         return 1;
+      }
+      fprintf(stderr,"Unknown libcvmfs option: %s\n",name);
+      return -1;
+   }
 
-static int cvmfs_set_option(char const *name, char const *value, unsigned *var)
-{
-    unsigned v = 0;
-    int end = 0;
-    int rc = sscanf(value,"%u%n",&v,&end);
-    if( rc != 1 || value[end] != '\0' ) {
-        fprintf(stderr,"Invalid unsigned integer value for %s=%s\n",name,value);
-        return -1;
-    }
-    *var = v;
-    return 0;
-}
+   int parse_options(char const *options)
+   {
+      while( *options ) {
+         char const *next = options;
+         string name;
+         string value;
 
-static int cvmfs_set_option(char const *name, char const *value, unsigned long *var)
-{
-    unsigned v = 0;
-    int end = 0;
-    int rc = sscanf(value,"%ul%n",&v,&end);
-    if( rc != 1 || value[end] != '\0' ) {
-        fprintf(stderr,"Invalid unsigned long integer value for %s=%s\n",name,value);
-        return -1;
-    }
-    *var = v;
-    return 0;
-}
-
-static int cvmfs_set_option(char const *name, char const *value, int *var)
-{
-    unsigned v = 0;
-    int end = 0;
-    int rc = sscanf(value,"%d%n",&v,&end);
-    if( rc != 1 || value[end] != '\0' ) {
-        fprintf(stderr,"Invalid integer value for %s=%s\n",name,value);
-        return -1;
-    }
-    *var = v;
-    return 0;
-}
-
-static int cvmfs_set_option(char const *name, char const *value, string *var)
-{
-    *var = value;
-    return 0;
-}
-
-#define CVMFS_OPT(o) if( strcmp(name,#o)==0 ) return cvmfs_set_option(name,value,&cvmfs_opts->o)
-static int cvmfs_set_option(char const *name, char const *value)
-{
-    CVMFS_OPT(url);
-    CVMFS_OPT(timeout);
-    CVMFS_OPT(timeout_direct);
-    CVMFS_OPT(max_ttl);
-    CVMFS_OPT(cachedir);
-    CVMFS_OPT(proxies);
-    CVMFS_OPT(tracefile);
-    CVMFS_OPT(force_signing);
-    CVMFS_OPT(whitelist);
-    CVMFS_OPT(pubkey);
-    CVMFS_OPT(logfile);
-    CVMFS_OPT(rebuild_cachedb);
-    CVMFS_OPT(quota_limit);
-    CVMFS_OPT(quota_threshold);
-    CVMFS_OPT(nofiles);
-    CVMFS_OPT(deep_mount);
-    CVMFS_OPT(repo_name);
-    CVMFS_OPT(blacklist);
-    CVMFS_OPT(syslog_level);
-
-    if( strcmp(name,"help")==0 ) {
-        usage();
-        return 1;
-    }
-    fprintf(stderr,"Unknown libcvmfs option: %s\n",name);
-    return -1;
-}
-
-static int cvmfs_parse_options(char const *options)
-{
-    delete cvmfs_opts;
-    cvmfs_opts = new struct cvmfs_opts;
-
-    while( *options ) {
-        char const *next = options;
-        string name;
-        string value;
-
-        // get the option name
-        for( next=options; *next && *next != ',' && *next != '='; next++ ) {
+         // get the option name
+         for( next=options; *next && *next != ',' && *next != '='; next++ ) {
             if( *next == '\\' ) {
-                next++;
-                if( *next == '\0' ) break;
+               next++;
+               if( *next == '\0' ) break;
             }
             name += *next;
-        }
+         }
 
-        if( *next == '=' ) {
+         if( *next == '=' ) {
             next++;
-        }
+         }
 
-        // get the option value
-        for(; *next && *next != ','; next++ ) {
+         // get the option value
+         for(; *next && *next != ','; next++ ) {
             if( *next == '\\' ) {
-                next++;
-                if( *next == '\0' ) break;
+               next++;
+               if( *next == '\0' ) break;
             }
             value += *next;
-        }
+         }
 
-        if( !name.empty() || !value.empty() ) {
-            if( cvmfs_set_option(name.c_str(),value.c_str()) != 0 ) {
-                return -1;
+         if( !name.empty() || !value.empty() ) {
+            int result = set_option(name.c_str(),value.c_str());
+            if (result != 0) {
+               return result;
             }
-        }
+         }
 
-        if( *next == ',' ) next++;
-        options = next;
-    }
-    return 0;
-}
+         if( *next == ',' ) next++;
+         options = next;
+      }
+      return 0;
+   }
+
+   /** 
+    * Display the usage message.
+    */
+   static void usage() {
+      struct cvmfs_opts defaults;
+      fprintf(stderr,
+            "CernVM-FS version %s\n"
+            "Copyright (c) 2009- CERN\n"
+            "All rights reserved\n\n"
+            "Please visit http://cernvm.cern.ch/project/info for license details and author list.\n\n"
+
+            "libcvmfs options are expected in the form: option1,option2,option3,...\n"
+            "Within an option, the characters , and \\ must be preceded by \\.\n\n"
+
+            "options are:\n"
+            " url=REPOSITORY_URL      The URL of the CernVM-FS server(s): 'url1;url2;...'\n"
+            " timeout=SECONDS         Timeout for network operations (default is %d)\n"
+            " timeout_direct=SECONDS  Timeout for network operations without proxy (default is %d)\n"
+            " max_ttl=MINUTES         Maximum TTL for file catalogs (default: take from catalog)\n"
+            " cachedir=DIR            Where to store disk cache\n"
+            " proxies=HTTP_PROXIES    Set the HTTP proxy list, such as 'proxy1|proxy2;DIRECT'\n"
+            " tracefile=FILE          Trace FUSE opaerations into FILE\n"
+            " whitelist=URL           HTTP location of trusted catalog certificates (defaults is /.cvmfswhitelist)\n"
+            " pubkey=PEMFILE          Public RSA key that is used to verify the whitelist signature.\n"
+            " force_signing           Except only signed catalogs\n"
+            " rebuild_cachedb         Force rebuilding the quota cache db from cache directory\n"
+            " quota_limit=MB          Limit size of data chunks in cache. -1 Means unlimited.\n"
+            " quota_threshold=MB      Cleanup until size is <= threshold\n"
+            " nofiles=NUMBER          Set the maximum number of open files for CernVM-FS process (soft limit)\n"
+            " logfile=FILE            Logs all messages to FILE instead of stderr and daemonizes.\n"
+            "                         Makes only sense for the debug version\n"
+            " deep_mount=prefix       Path prefix if a repository is mounted on a nested catalog,\n"
+            "                         i.e. deep_mount=/software/15.0.1\n"
+            " repo_name=<repository>  Unique name of the mounted repository, e.g. atlas.cern.ch\n"
+            " blacklist=FILE          Local blacklist for invalid certificates.  Has precedence over the whitelist.\n"
+            "                         (Default is /etc/cvmfs/blacklist)\n"
+            " syslog_level=NUMBER     Sets the level used for syslog to DEBUG (1), INFO (2), or NOTICE (3).\n"
+            "                         Default is NOTICE.\n"
+            " Note: you cannot load files greater than quota_limit-quota_threshold\n",
+            PACKAGE_VERSION, defaults.timeout, defaults.timeout_direct
+            );
+   }
+};
+
 
 
 /* Making OpenSSL (libcrypto) thread-safe */
@@ -1742,48 +1730,57 @@ int cvmfs_init(char const *options)
    atomic_init64(&ndownload);
 
    /* Parse options */
-   if ((cvmfs_parse_options(options) != 0) || cvmfs_opts->url.empty()) 
+   struct cvmfs_opts cvmfs_opts;
+   int parse_result = cvmfs_opts.parse_options(options);
+   if (parse_result != 0)
    {
-      usage();
+      if (parse_result < 0) {
+         fprintf(stderr,"Invalid CVMFS options: %s.\n",options);
+         cvmfs_opts.usage();
+      }
+      goto cvmfs_cleanup;
+   }
+   if (cvmfs_opts.url.empty()) {
+      fprintf(stderr,"No url specified in CVMFS options: %s.\n",options);
       goto cvmfs_cleanup;
    }
 
    /* Fill cvmfs option variables from parsed options */
    if (!cvmfs::uid) cvmfs::uid = getuid();
    if (!cvmfs::gid) cvmfs::gid = getgid();
-   if (cvmfs_opts->max_ttl) cvmfs::max_ttl = cvmfs_opts->max_ttl*60;
-   cvmfs::cachedir = cvmfs_opts->cachedir;
-   cvmfs::proxies = cvmfs_opts->proxies;
-   if (cvmfs_opts->force_signing) cvmfs::force_signing = true;
-   cvmfs::pubkey = cvmfs_opts->pubkey;
-   cvmfs::tracefile = cvmfs_opts->tracefile;
-   if (!cvmfs_opts->deep_mount.empty()) cvmfs::deep_mount = canonical_path(cvmfs_opts->deep_mount);
-   cvmfs::blacklist = cvmfs_opts->blacklist;
-   cvmfs::repo_name = cvmfs_opts->repo_name;
+   if (cvmfs_opts.max_ttl) cvmfs::max_ttl = cvmfs_opts.max_ttl*60;
+   cvmfs::cachedir = cvmfs_opts.cachedir;
+   cvmfs::proxies = cvmfs_opts.proxies;
+   if (cvmfs_opts.force_signing) cvmfs::force_signing = true;
+   cvmfs::pubkey = cvmfs_opts.pubkey;
+   cvmfs::tracefile = cvmfs_opts.tracefile;
+   if (!cvmfs_opts.deep_mount.empty()) cvmfs::deep_mount = canonical_path(cvmfs_opts.deep_mount);
+   cvmfs::blacklist = cvmfs_opts.blacklist;
+   cvmfs::repo_name = cvmfs_opts.repo_name;
    /* seperate first host from hostlist */
    unsigned iter_url;
-   for (iter_url = 0; iter_url < cvmfs_opts->url.length(); ++iter_url) {
-      if (cvmfs_opts->url[iter_url] == ',' || cvmfs_opts->url[iter_url] == ';') break;
+   for (iter_url = 0; iter_url < cvmfs_opts.url.length(); ++iter_url) {
+      if (cvmfs_opts.url[iter_url] == ',' || cvmfs_opts.url[iter_url] == ';') break;
    }
    if (iter_url == 0) cvmfs::root_url = "";
-   else cvmfs::root_url = string(cvmfs_opts->url, 0, iter_url);
+   else cvmfs::root_url = string(cvmfs_opts.url, 0, iter_url);
       
-   cvmfs::whitelist = cvmfs_opts->whitelist;
+   cvmfs::whitelist = cvmfs_opts.whitelist;
    
    /* Syslog level */
-   syslog_setlevel(cvmfs_opts->syslog_level);
+   syslog_setlevel(cvmfs_opts.syslog_level);
    if (cvmfs::repo_name != "")
       syslog_setprefix(cvmfs::repo_name.c_str());
    
    /* Set debug log file */
-   if (!cvmfs_opts->logfile.empty()) {
-      debug_set_log(cvmfs_opts->logfile.c_str());
+   if (!cvmfs_opts.logfile.empty()) {
+      debug_set_log(cvmfs_opts.logfile.c_str());
    }
    
    /* CVMFS has its own proxy environment, chain of proxies */
-   num_hosts = curl_set_host_chain(cvmfs_opts->url.c_str());
+   num_hosts = curl_set_host_chain(cvmfs_opts.url.c_str());
    curl_set_proxy_chain(cvmfs::proxies.c_str());
-   curl_set_timeout(cvmfs_opts->timeout, cvmfs_opts->timeout_direct);
+   curl_set_timeout(cvmfs_opts.timeout, cvmfs_opts.timeout_direct);
                     
    /* Create cache directory. */
    if (!mkdir_deep(cvmfs::cachedir, 0700)) {
@@ -1801,7 +1798,7 @@ int cvmfs_init(char const *options)
    }
    cache_ready = true;
    
-   nofiles = cvmfs_opts->nofiles;
+   nofiles = cvmfs_opts.nofiles;
    atomic_init(&cvmfs::open_files);
    atomic_init(&cvmfs::nioerr);
       
@@ -1814,24 +1811,24 @@ int cvmfs_init(char const *options)
    signature_ready = true;
    
    /* Init quota / lru cache */
-   if (cvmfs_opts->quota_limit < 0) {
+   if (cvmfs_opts.quota_limit < 0) {
       pmesg(D_CVMFS, "unlimited cache size");
-      cvmfs_opts->quota_limit = -1;
-      cvmfs_opts->quota_threshold = 0;
+      cvmfs_opts.quota_limit = -1;
+      cvmfs_opts.quota_threshold = 0;
    } else {
-      cvmfs_opts->quota_limit *= 1024*1024;
-      cvmfs_opts->quota_threshold *= 1024*1024;
+      cvmfs_opts.quota_limit *= 1024*1024;
+      cvmfs_opts.quota_threshold *= 1024*1024;
    }
-   if (!lru::init(".", (uint64_t)cvmfs_opts->quota_limit, 
-                       (uint64_t)cvmfs_opts->quota_threshold,
-                       cvmfs_opts->rebuild_cachedb)) 
+   if (!lru::init(".", (uint64_t)cvmfs_opts.quota_limit, 
+                       (uint64_t)cvmfs_opts.quota_threshold,
+                       cvmfs_opts.rebuild_cachedb)) 
    {
       cerr << "Failed to initialize lru cache" << endl;
       goto cvmfs_cleanup;
    }
    quota_ready = true;
 
-   if (cvmfs_opts->rebuild_cachedb) {
+   if (cvmfs_opts.rebuild_cachedb) {
       cout << "CernVM-FS: rebuilding lru cache database..." << endl;
       if (!lru::build()) {
          cerr << "Failed to rebuild lru cache database" << endl;
@@ -1840,12 +1837,12 @@ int cvmfs_init(char const *options)
    }
    if (lru::size() > lru::capacity()) {
       cout << "Warning: your cache is already beyond quota size, cleaning up" << endl;
-      if (!lru::cleanup(cvmfs_opts->quota_threshold*(1024*1024))) {
+      if (!lru::cleanup(cvmfs_opts.quota_threshold*(1024*1024))) {
          cerr << "Failed to clean up" << endl;
          goto cvmfs_cleanup;
       }
    }
-   if (cvmfs_opts->quota_limit) {
+   if (cvmfs_opts.quota_limit) {
       cout << "CernVM-FS: quota initialized, current size " << lru::size()/(1024*1024) 
            << "MB" << endl;
    }
@@ -1899,9 +1896,6 @@ void cvmfs_fini() {
    if (cache_ready) cache::fini();
    Tracer::fini();
 
-   delete cvmfs_opts;
-   cvmfs_opts = NULL;
-   
    sqlite3_shutdown();
    free(sqlite_page_cache);
    free(sqlite_scratch);
