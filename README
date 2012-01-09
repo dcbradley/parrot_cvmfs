@@ -11,7 +11,7 @@ checked into the 'upstream' branch.  The following versions are
 currently used:
 
 cvmfs-2.0.4
-cctools-1644
+cctools-1660
 
 To see the development that has been done, compare the master
 branch to the upstream branch:

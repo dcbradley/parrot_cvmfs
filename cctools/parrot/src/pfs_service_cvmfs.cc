@@ -144,7 +144,7 @@ bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 			cvmfs_active_filesystem = NULL;
 		}
 
-		debug(D_GROW, "Initializing libcvmfs with the following options: %s", f->cvmfs_options);
+		debug(D_CVMFS, "Initializing libcvmfs with the following options: %s", f->cvmfs_options);
 
 		int rc = cvmfs_init(f->cvmfs_options);
 		if(rc != 0) {
@@ -180,7 +180,7 @@ struct cvmfs_filesystem *cvmfs_filesystem_create(const char *repo_name, const ch
 			proxy,
 			user_options);
 
-	debug(D_GROW, "cvmfs filesystem configured %s with repo path %s and options %s", repo_name, f->path, f->cvmfs_options);
+	debug(D_CVMFS, "cvmfs filesystem configured %s with repo path %s and options %s", repo_name, f->path, f->cvmfs_options);
 
 	return f;
 }
@@ -291,10 +291,10 @@ cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result
 	struct cvmfs_filesystem *f;
 	const char *subpath;
 
-	debug(D_GROW, "cvmfs lookup_filesystem(%s,%s)", name->host, name->rest);
+	debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s)", name->host, name->rest);
 
 	if(!name->host[0]) {
-		debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
+		debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
 		errno = ENOENT;
 		return 0;
 	}
@@ -309,20 +309,20 @@ cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result
 			if(!subpath) {
 				subpath = compare_path_prefix(name->rest, f->path);
 				if(subpath) {
-					debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
+					debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
 					errno = ENOENT;
 					return 0;
 				} else {
 					continue;
 				}
 			}
-			debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> %s,%s,%s", name->host, name->rest, f->host, f->path, subpath);
+			debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s) --> %s,%s,%s", name->host, name->rest, f->host, f->path, subpath);
 			*subpath_result = subpath;
 			return f;
 		}
 	}
 
-	debug(D_GROW, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
+	debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
 	errno = ENOENT;
 	return 0;
 }
@@ -430,7 +430,7 @@ class pfs_service_cvmfs:public pfs_service {
 	virtual pfs_file *open(pfs_name * name, int flags, mode_t mode) {
 		struct cvmfs_dirent d;
 
-		debug(D_GROW, "cvmfs open(%s,%d,%d)", name->rest, flags, mode);
+		debug(D_CVMFS, "cvmfs open(%s,%d,%d)", name->rest, flags, mode);
 
 		if(!d.lookup(name, 1)) {
 			return 0;
@@ -446,7 +446,7 @@ class pfs_service_cvmfs:public pfs_service {
 	pfs_dir *getdir(pfs_name * name) {
 		struct cvmfs_dirent d;
 
-		debug(D_GROW, "cvmfs getdir(%s)", name->rest);
+		debug(D_CVMFS, "cvmfs getdir(%s)", name->rest);
 
 		if(!d.lookup(name, 1)) {
 			return 0;
@@ -481,7 +481,7 @@ class pfs_service_cvmfs:public pfs_service {
 	virtual int lstat(pfs_name * name, struct pfs_stat *info) {
 		struct cvmfs_dirent d;
 
-		debug(D_GROW, "cvmfs lstat(%s)", name->rest);
+		debug(D_CVMFS, "cvmfs lstat(%s)", name->rest);
 
 		if(!d.lookup(name, 0)) {
 			return -1;
@@ -496,14 +496,14 @@ class pfs_service_cvmfs:public pfs_service {
 		struct cvmfs_dirent d;
 
 		if(!d.lookup(name, 1)) {
-			debug(D_GROW, "cvmfs stat(%s) --> -1 (lookup failed)", name->rest);
+			debug(D_CVMFS, "cvmfs stat(%s) --> -1 (lookup failed)", name->rest);
 
 			return -1;
 		}
 
 		cvmfs_dirent_to_stat(&d, info);
 
-		debug(D_GROW, "cvmfs stat(%s) --> (%d,%d,%d,%d) ISDIR=%d", name->rest, info->st_mode, info->st_size, info->st_mtime, info->st_ino, S_ISDIR(info->st_mode));
+		debug(D_CVMFS, "cvmfs stat(%s) --> (%d,%d,%d,%d) ISDIR=%d", name->rest, info->st_mode, info->st_size, info->st_mtime, info->st_ino, S_ISDIR(info->st_mode));
 
 		return 0;
 	}
@@ -515,7 +515,7 @@ class pfs_service_cvmfs:public pfs_service {
 
 	virtual int access(pfs_name * name, mode_t mode) {
 		struct pfs_stat info;
-		debug(D_GROW, "cvmfs access(%s,%d)", name->rest, mode);
+		debug(D_CVMFS, "cvmfs access(%s,%d)", name->rest, mode);
 		if(this->stat(name, &info) == 0) {
 			if(mode & W_OK) {
 				errno = EROFS;
@@ -561,7 +561,7 @@ class pfs_service_cvmfs:public pfs_service {
 	virtual int chdir(pfs_name * name, char *newpath) {
 		struct pfs_stat info;
 
-		debug(D_GROW, "cvmfs chdir(%s)", name->rest);
+		debug(D_CVMFS, "cvmfs chdir(%s)", name->rest);
 
 		if(this->stat(name, &info) == 0) {
 			if(S_ISDIR(info.st_mode)) {
@@ -594,14 +594,14 @@ class pfs_service_cvmfs:public pfs_service {
 
 		if(S_ISLNK(d.mode)) {
 			int rc = cvmfs_readlink(name->rest, buf, bufsiz);
-			debug(D_GROW, "cvmfs readlink(%s) --> %d", name->rest, rc);
+			debug(D_CVMFS, "cvmfs readlink(%s) --> %d", name->rest, rc);
 			if(rc < 0) {
 				errno = -rc;
 				return -1;
 			}
 			return strlen(buf);
 		} else {
-			debug(D_GROW, "cvmfs readlink(%s) --> -1 (not a link)", name->rest);
+			debug(D_CVMFS, "cvmfs readlink(%s) --> -1 (not a link)", name->rest);
 			errno = EINVAL;
 			return -1;
 		}
