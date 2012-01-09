@@ -1,8 +1,10 @@
 Author: Dan Bradley <dan@hep.wisc.edu>
 
 This repository is for integration work required to support access to
-CVMFS in parrot.  All modifications made in this repository to CVMFS
-and cctools are subject to the license in cctools/COPYING (GPLv2).
+CVMFS in parrot.  All modifications and additions in this repository
+made to code in cvmfs are subject to the license in cvmfs/COPYING
+(BSD).  All modifications and additions in this repository made to
+code in cctools are subject to the license in cctools/COPYING (GPLv2).
 
 The sourcecode tarballs for CVMFS and parrot were downloaded and
 checked into the 'upstream' branch.  The following versions are
