@@ -166,7 +166,7 @@ namespace cache {
     */
    int open(const hash::t_sha1 &id) {
       const string lpath = cached_name(id);
-      int result = ::open(lpath.c_str(), O_RDONLY, 0);
+      int result = ::open(lpath.c_str(), O_RDONLY | O_DIRECT | O_NOATIME, 0);
       
       if (result >= 0) pmesg(D_CACHE, "hit %s", lpath.c_str());
       else pmesg(D_CACHE, "miss %s (%d)", lpath.c_str(), result);

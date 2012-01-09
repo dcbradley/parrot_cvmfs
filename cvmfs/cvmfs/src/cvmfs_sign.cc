@@ -33,7 +33,7 @@ using namespace std;
 
 static void usage() {
    cout << "This tool signs a CernVM-FS file catalog." << endl;
-   cout << "Usage: cvmfs_sign [-c <x509 certificate>] [-k <private key>] [-p <password>] [-n <repository name>] <catalog>" << endl;
+   cout << "Usage: cvmfs_sign [-c <x509 certificate>] [-k <private key>] [-p <password>] [-n <repository name>] [-u (system umask)] <catalog>" << endl;
 }
 
 int main(int argc, char **argv) {  
@@ -47,9 +47,10 @@ int main(int argc, char **argv) {
    string priv_key = "";
    string pwd = "";
    string repo_name = "";
+   bool system_umask = false;
    
    char c;
-   while ((c = getopt(argc, argv, "c:k:p:n:h")) != -1) {
+   while ((c = getopt(argc, argv, "c:k:p:n:hu")) != -1) {
       switch (c) {
          case 'c':
             certificate = optarg;
@@ -62,6 +63,9 @@ int main(int argc, char **argv) {
             break;
          case 'n':
             repo_name = optarg;
+            break;
+         case 'u':
+            system_umask = true;
             break;
          case 'h':
             usage();
@@ -79,6 +83,11 @@ int main(int argc, char **argv) {
    
    const string clg_path = dir_catalogs + "/.cvmfscatalog.working";
    const string snapshot_path = dir_catalogs + "/.cvmfscatalog";
+   
+   if (!system_umask)
+      umask(0022);
+   mode_t my_umask = umask(0);
+   umask(my_umask);
    
    /* Load certificate */
    signature::init();
@@ -220,7 +229,8 @@ int main(int argc, char **argv) {
       const string cert_path_tmp = dir_catalogs + "/data/txn/cvmfspublisher.tmp";
       int fd_cert;
       FILE *fcert;
-      if ( ((fd_cert = open(cert_path_tmp.c_str(), O_CREAT | O_TRUNC | O_RDWR, plain_file_mode)) < 0) ||
+      if ( ((fd_cert = open(cert_path_tmp.c_str(), O_CREAT | O_TRUNC | O_RDWR, 
+                            full_file_mode & ~my_umask)) < 0) ||
           !(fcert = fdopen(fd_cert, "w")) )
       {
          cerr << "Failed to save certificate" << endl;
@@ -248,7 +258,7 @@ int main(int argc, char **argv) {
       
       /* Write extended checksum */
       map<char, string> content;
-      if (!parse_keyval(dir_catalogs + "/.cvmfspublished", content) ||
+      if (!parse_keyval(dir_catalogs + "/.cvmfspublished.unsigned", content) ||
           (content.find('C') == content.end()))
       {
          //cerr << "Failed to read extended checksum" << endl;
@@ -273,7 +283,7 @@ int main(int argc, char **argv) {
          const string sha1_str = sha1.to_string();
          final += "--\n" + sha1_str + "\n";
          
-         FILE *fext = fopen((dir_catalogs + "/.cvmfspublished").c_str(), "w");
+         FILE *fext = fopen((dir_catalogs + "/.cvmfspublished.signed").c_str(), "w");
          if (!fext) {
             cerr << "Failed to write extended checksum" << endl;
             goto sign_fail;
@@ -281,6 +291,7 @@ int main(int argc, char **argv) {
          if (fwrite(&(final[0]), 1, final.length(), fext) != final.length()) {
             cerr << "Failed to write extended checksum" << endl;
             fclose(fext);
+            unlink((dir_catalogs + "/.cvmfspublished.signed").c_str());
             goto sign_fail;
          }
          
@@ -290,17 +301,25 @@ int main(int argc, char **argv) {
          if (!signature::sign(&(sha1_str[0]), 40, &sig, &sig_size)) {
             cerr << "Failed to sign extended checksum" << endl;
             fclose(fext);
+            unlink((dir_catalogs + "/.cvmfspublished.signed").c_str());
             goto sign_fail;
          }
          if (fwrite(sig, 1, sig_size, fext) != sig_size) {
             cerr << "Failed to write checksum for extended checksum" << endl;
             free(sig);
             fclose(fext);
+            unlink((dir_catalogs + "/.cvmfspublished.signed").c_str());
             goto sign_fail;
          }
          free(sig);
          
          fclose(fext);
+         
+         if (rename((dir_catalogs + "/.cvmfspublished.signed").c_str(), (dir_catalogs + "/.cvmfspublished").c_str()) != 0) {
+            cerr << "Failed to publish extended checksum" << endl;
+            unlink((dir_catalogs + "/.cvmfspublished.signed").c_str());
+            goto sign_fail;
+         }
       }
    }
    

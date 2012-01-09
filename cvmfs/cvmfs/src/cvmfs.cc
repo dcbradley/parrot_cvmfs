@@ -1576,6 +1576,9 @@ namespace cvmfs {
          available = lru::capacity() - size;
       }
       
+      //info->f_blocks = 50000000000L;
+      //available = 20000000000L;
+      
       info->f_bfree = info->f_bavail = available;
       
       return 0;
@@ -2396,6 +2399,7 @@ int main(int argc, char *argv[])
       cvmfs::cachedir (256 directories named 00..ff) */
    if (!cache::init(".", cvmfs::root_url, &mutex_download)) {
       cerr << "Failed to setup cache in " << cvmfs::cachedir << ": " << strerror(errno) << endl;
+      logmsg("failed to setup cache directory %s", cvmfs::cachedir.c_str());
       goto cvmfs_cleanup;
    }
    cache_ready = true;
@@ -2445,7 +2449,7 @@ int main(int argc, char *argv[])
    }
    if (lru::size() > lru::capacity()) {
       cout << "Warning: your cache is already beyond quota size, cleaning up" << endl;
-      if (!lru::cleanup(cvmfs_opts.quota_threshold*(1024*1024))) {
+      if (!lru::cleanup(cvmfs_opts.quota_threshold)) {
          cerr << "Failed to clean up" << endl;
          goto cvmfs_cleanup;
       }
@@ -2488,8 +2492,8 @@ int main(int argc, char *argv[])
       
    /* Set fuse callbacks, remove url from arguments */
    cout << "CernVM-FS: mounted cvmfs on " << cvmfs::mountpoint << endl;
-   cout << "CernVM-FS: linking to remote directoy " << cvmfs::root_url << endl;
-   logmsg("CernVM-FS: linking %s to remote directoy %s", cvmfs::mountpoint.c_str(), cvmfs::root_url.c_str());
+   cout << "CernVM-FS: linking to remote directory " << cvmfs::root_url << endl;
+   logmsg("CernVM-FS: linking %s to remote directory %s", cvmfs::mountpoint.c_str(), cvmfs::root_url.c_str());
    set_cvmfs_ops(&cvmfs_operations);
    result = fuse_main(fuse_args.argc, fuse_args.argv, &cvmfs_operations);
    

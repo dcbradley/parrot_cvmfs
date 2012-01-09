@@ -1,3 +1,22 @@
+2.0.7:
+
+2.0.6:
+  * Server tools use system umask if CVMFS_SYSTEM_UMASK is yes;
+    otherwise it's 0022
+  * Better support of cvmfs service and cvmfs-talk for no 
+    strict mount setting
+  * Better detection for missing chunk directories in cache
+  * Fixed quota cleanup on startup
+  * Added distribution to release for SLC6 spec file
+  * Changed default cache quota to 4G
+  * Updated Nagios check    
+
+2.0.5:
+  * Removed race condition for .cvmfspublished when repositories
+    are updated
+  * Cosmetics for cvmfs_config
+  * Some compatibility fixes for server side and Ubuntu  
+
 2.0.4:
   * Check schema version when loading catalogs
   * Warn in cvmfs_config chksetup if no cache quota is set

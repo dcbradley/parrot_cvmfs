@@ -455,6 +455,7 @@ namespace lru {
          path = cache_dir + "/" + string(hex);
          if ((dirp = opendir(path.c_str())) == NULL) {
             pmesg(D_LRU, "failed to open directory %s", path.c_str());
+            logmsg("failed to open directory %s (tmpwatch interfering?)", path.c_str());
             goto build_return;
          }
          while ((d = readdir(dirp)) != NULL) {

@@ -77,10 +77,15 @@ publish() {
    local name; name=$1
    local book_keeping="/srv/cvmfs/$name/ctrl/dirty_catalogs"
    
-   su cvmfs -c cvmfs-sync
+   local system_umask
+   if [ "x$CVMFS_SYSTEM_UMASK" == "xyes" ]; then
+      system_umask="-u"
+   fi
+   
+   su cvmfs -s /bin/bash -c cvmfs-sync
    for c in `cat $book_keeping`
    do
-      su cvmfs -c "cvmfs_sign -c /etc/cvmfs/keys/${name}.crt -k /etc/cvmfs/keys/$name.key -n $name $c"
+      su cvmfs -s /bin/bash -c "cvmfs_sign -c /etc/cvmfs/keys/${name}.crt -k /etc/cvmfs/keys/$name.key -n $name $system_umask $c"
    done
    cat /dev/null > $book_keeping
 }
@@ -111,6 +116,7 @@ CVMFS_SYNC_THREADS=16
 SIGN_CATALOG=yes
 CVMFS_LAZYATTACH=yes
 CVMFS_BOOKKEEPING=/srv/cvmfs/$name/ctrl/dirty_catalogs
+CVMFS_SYSTEM_UMASK=yes
 EOF
    cat > /etc/httpd/conf.d/cvmfs.conf << EOF
 # Created by cvmfs_server.  Don't touch.

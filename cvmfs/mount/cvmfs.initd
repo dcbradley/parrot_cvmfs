@@ -138,6 +138,7 @@ status() {
    fi
   
    local org
+   local processed
    for org in $list
    do
       case $org in
@@ -147,6 +148,7 @@ status() {
             . /etc/cvmfs/config.sh # start with fresh repository_... functions
             cvmfs_readconfig
             fqrn=`cvmfs_mkfqrn $org`
+            processed="$fqrn $processed"
             cvmfs_readconfig $fqrn
             mount -t cvmfs | grep $CVMFS_MOUNT_DIR/$fqrn > /dev/null
             if [ $? -eq 0 ]; then
@@ -164,6 +166,17 @@ status() {
             fi
             ;;
       esac 
+   done
+   
+   local mounted_repos
+   mounted_repos=`mount -t cvmfs | awk '{print $3}'`
+   for repo in $mounted_repos
+   do
+      repo=`basename "$repo"`
+      echo "$processed" | grep -q "$repo"
+      if [ $? -ne 0 ]; then
+         echo "CernVM-FS mounted on $CVMFS_MOUNT_DIR/$repo (not in CVMFS_REPOSITORIES)" 
+      fi
    done
   
    return $RETVAL

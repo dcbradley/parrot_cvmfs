@@ -93,6 +93,8 @@ struct t_cas_file {
    catalog::t_dirent dirent;
 };
 
+mode_t my_umask;
+
 map<string, t_catalog_info> open_catalogs; ///< bool is a dirty flag that shows which catalog to snapshot
 
 /* path sets (absolute) */
@@ -317,7 +319,9 @@ static bool init_catalogs(const string &dir_catalogs, const string &dir_shadow,
    const string clg_path = dir_catalogs + "/.cvmfscatalog.working";
    
    cout << "Attaching " << clg_path << endl;
-   if (!catalog::attach(clg_path, "", false, false)) {
+   if (!catalog::attach(clg_path, "", false, false) || 
+       (chmod(clg_path.c_str(), full_file_mode & ~my_umask) != 0)) 
+   {
       cerr << "could not init root catalog" << endl;
       return false;
    }
@@ -517,7 +521,7 @@ static void clg_snapshot(const string &path,
    FILE *fsrc = NULL, *fdst = NULL;
    int fd_dst;
    if (!(fsrc = fopen(src_path.c_str(), "r")) ||
-       ((fd_dst = open(dst_path.c_str(), O_CREAT | O_TRUNC | O_RDWR, plain_file_mode)) < 0) ||
+       ((fd_dst = open(dst_path.c_str(), O_CREAT | O_TRUNC | O_RDWR, full_file_mode)) < 0) ||
        !(fdst = fdopen(fd_dst, "w")) ||
        (compress_file_fp_sha1(fsrc, fdst, sha1.digest) != 0))
    {
@@ -542,7 +546,7 @@ static void clg_snapshot(const string &path,
    unlink((cat_path + "/.cvmfspublisher.x509").c_str());   
    
    /* Create extended checksum */
-   FILE *fpublished = fopen((cat_path + "/.cvmfspublished").c_str(), "w");
+   FILE *fpublished = fopen((cat_path + "/.cvmfspublished.unsigned").c_str(), "w");
    if (fpublished) {
       string fields = "C" + sha1.to_string() + "\n";
       hash::t_md5 md5(catalog::mangled_path(clg_path));
@@ -590,7 +594,7 @@ static void clg_snapshot(const string &path,
    
    FILE *fsha1 = NULL;
    int fd_sha1;
-   if (((fd_sha1 = open((cat_path + "/.cvmfschecksum").c_str(), O_CREAT | O_TRUNC | O_RDWR, plain_file_mode)) < 0) ||
+   if (((fd_sha1 = open((cat_path + "/.cvmfschecksum").c_str(), O_CREAT | O_TRUNC | O_RDWR, full_file_mode)) < 0) ||
        !(fsha1 = fdopen(fd_sha1, "w")) ||
        (fwrite(compr_buf, 1, compr_size, fsha1) != compr_size))
    {
@@ -620,7 +624,7 @@ static bool move_to_datastore(const string &source, const string &suffix,
    strncpy(tmp_path, templ.c_str(), templ.length() + 1);
    int fd_dst = mkstemp(tmp_path);
    
-   if ((fd_dst >= 0) && (fchmod(fd_dst, plain_file_mode) == 0)) {
+   if ((fd_dst >= 0) && (fchmod(fd_dst, full_file_mode & ~my_umask) == 0)) {
       /* Compress and calculate SHA1 */
       FILE *fsrc = NULL, *fdst = NULL;
       if ( (fsrc = fopen(source.c_str(), "r")) && 
@@ -658,7 +662,7 @@ static void usage() {
    cout << "Usage: cvmfs_sync -s <shadow dir> -r <repository store> -l <file system change log file>" << endl
         << "                  [-p(rint change set)] [-d(ry run)] [-i <immutable dir(,dir)*>] [-c(ompat catalog)]" << endl 
         << "                  [-k(ey file)] [-z (lazy attach of catalogs)] [-b(ookkeeping of dirty catalogs)]" << endl
-        << "                  [-t <threads>] [-m(ucatalogs)]" << endl << endl
+        << "                  [-t <threads>] [-m(ucatalogs)] [-u (system umask)]" << endl << endl
         << "Make sure that a 'data' and a 'catalogs' subdirectory exist in your repository store." << endl
         << "Also, your webserver must be able to follow symlinks in the catalogs subdirectory." << endl
         << "For Apache, you can add 'Options +FollowSymLinks' to a '.htaccess' file." 
@@ -686,8 +690,7 @@ int main(int argc, char **argv) {
    bool lazy_attach = false;
    int sync_threads = 0;
    bool mucatalogs = false;
-   
-   umask(022);
+   bool system_umask = false;
    
    if (!monitor::init(".", false)) {
       cerr << "Failed to init watchdog" << cerr;
@@ -695,7 +698,7 @@ int main(int argc, char **argv) {
    monitor::spawn();
    
    char c;
-   while ((c = getopt(argc, argv, "s:r:l:pdi:ck:zb:t:m")) != -1) {
+   while ((c = getopt(argc, argv, "s:r:l:pdi:ck:zb:t:mu")) != -1) {
       switch (c) {
          case 's':
             dir_shadow = canonical_path(optarg);
@@ -758,12 +761,20 @@ int main(int argc, char **argv) {
          case 'm':
             mucatalogs = true;
             break;
+         case 'u':
+            system_umask = true;
+            break;   
          case '?':
          default:
             usage();
             return 1;
       }
    }
+   
+   if (!system_umask)
+      umask(022);
+   my_umask = umask(0);
+   umask(my_umask);
    
    /* Sanity checks */
    if (!fjournal.is_open()) {
@@ -784,7 +795,7 @@ int main(int argc, char **argv) {
    }
       
    /* Init stuff */
-   if (!make_cache_dir(dir_data, 0755)) {
+   if (!make_cache_dir(dir_data, full_dir_mode)) {
       cerr << "could not initialize data store" << endl;
       return 3;
    }
@@ -1415,7 +1426,7 @@ catalogs_attached:
            i != iEnd; ++i)
       {     
          /* Mimick directory structure in /pub/catalogs/ */
-         if (!mkdir_deep(dir_catalogs + abs2clg_path(*i, dir_shadow), plain_dir_mode)) {
+         if (!mkdir_deep(dir_catalogs + abs2clg_path(*i, dir_shadow), full_dir_mode)) {
             cerr << "Warning: cannot create catalog directory structure " << *i << endl;
             continue;
          }
@@ -1440,7 +1451,8 @@ catalogs_attached:
          
          /* Move entries in nested catalog */
          if (!catalog::update_unprotected(md5, d) ||
-             !catalog::attach(cat_path, "", false, true) ||
+             !catalog::attach(cat_path, "", false, true) || 
+             (chmod(cat_path.c_str(), full_file_mode & ~my_umask) != 0) ||
              !catalog::set_root_prefix(clg_path, n.catalog_id),
              !catalog::insert_unprotected(md5, p_md5, n) ||
              !catalog::relink_unprotected(catalog::mangled_path(clg_path), catalog::mangled_path(clg_path)) ||
@@ -1545,7 +1557,7 @@ catalogs_attached:
          }
       }
       cout << "using " << sync_threads << " threads ";
-#elif
+#else
       sync_threads = 1;
 #endif
       cout << "(" << file_list.size() << " files): " << flush;

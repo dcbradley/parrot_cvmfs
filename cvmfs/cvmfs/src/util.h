@@ -15,6 +15,11 @@
 
 const int plain_file_mode = S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH;
 const int plain_dir_mode = S_IXUSR | S_IWUSR | S_IRUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+const int full_file_mode = S_IWUSR | S_IRUSR | S_IWGRP | S_IRGRP | S_IWOTH | S_IROTH;
+const int full_dir_mode = S_IWUSR | S_IRUSR | S_IXUSR | 
+                          S_IWGRP | S_IRGRP | S_IXGRP | 
+                          S_IWOTH | S_IROTH | S_IXOTH;
+
 
 std::string canonical_path(const std::string &p);
 std::string get_parent_path(const std::string &path);
