@@ -10,8 +10,8 @@ The sourcecode tarballs for CVMFS and parrot were downloaded and
 checked into the 'upstream' branch.  The following versions are
 currently used:
 
-cvmfs-2.0.4
-cctools-1660
+cvmfs trunk r3081
+cctools trunk r1660
 
 To see the development that has been done, compare the master
 branch to the upstream branch:
@@ -22,6 +22,25 @@ git diff upstream..master -- cvmfs
 To build:
 
 cd cvmfs
+
+cd jemalloc
+tar tjf jemalloc-linux-20080828a.tar.bz2
+mv jemalloc-2.2.1 src
+patch -i jemalloc-2.2.1-64bit_literals.patch
+cd ..
+
+cd libcurl
+tar xvzf curl-7.21.3.tar.gz
+mv curl-7.21.3/* src/
+cd ..
+
+cd libfuse
+tar xvzf fuse-2.8.4.tar.gz
+mv fuse-2.8.4/* src/
+patch -i fuse-drainout.patch
+cd ..
+
+autoconf
 ./configure --disable-server --enable-sqlite3-builtin --enable-libcurl-builtin
 make
 

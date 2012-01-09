@@ -1794,6 +1794,7 @@ int cvmfs_init(char const *options)
       cvmfs::cachedir (256 directories named 00..ff) */
    if (!cache::init(".", cvmfs::root_url, &mutex_download)) {
       cerr << "Failed to setup cache in " << cvmfs::cachedir << ": " << strerror(errno) << endl;
+      logmsg("failed to setup cache directory %s", cvmfs::cachedir.c_str());
       goto cvmfs_cleanup;
    }
    cache_ready = true;
@@ -1837,7 +1838,7 @@ int cvmfs_init(char const *options)
    }
    if (lru::size() > lru::capacity()) {
       cout << "Warning: your cache is already beyond quota size, cleaning up" << endl;
-      if (!lru::cleanup(cvmfs_opts.quota_threshold*(1024*1024))) {
+      if (!lru::cleanup(cvmfs_opts.quota_threshold)) {
          cerr << "Failed to clean up" << endl;
          goto cvmfs_cleanup;
       }
