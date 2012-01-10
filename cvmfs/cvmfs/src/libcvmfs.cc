@@ -1792,7 +1792,7 @@ int cvmfs_init(char const *options)
       
    /* Try to init the cache... this creates a set of directories in 
       cvmfs::cachedir (256 directories named 00..ff) */
-   if (!cache::init(".", cvmfs::root_url, &mutex_download)) {
+   if (!cache::init(cvmfs::cachedir, cvmfs::root_url, &mutex_download)) {
       cerr << "Failed to setup cache in " << cvmfs::cachedir << ": " << strerror(errno) << endl;
       logmsg("failed to setup cache directory %s", cvmfs::cachedir.c_str());
       goto cvmfs_cleanup;
