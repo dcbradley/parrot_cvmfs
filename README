@@ -19,6 +19,16 @@ branch to the upstream branch:
 git diff upstream..master -- cctools
 git diff upstream..master -- cvmfs
 
+The code in cvmfs/cvmfs/src/cvmfs_common.cc is intended to
+be shared between the FUSE module and libcvmfs.  However,
+to avoid making large changes to the current CVMFS trunk,
+making cvmfs.cc depend on cvmfs_common.cc has been postponed
+for the future.  To see the small changes that were made
+to code copied from cvmfs.cc into cvmfs_common.cc:
+
+git diff cvmfs/cvmfs/src/cvmfs.cc cvmfs/cvmfs/src/cvmfs_common.cc
+
+
 To build:
 
 cd cvmfs
