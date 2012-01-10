@@ -139,6 +139,20 @@ namespace cvmfs {
    const int NUM_RESERVED_FD = 512; ///< number of reserved file descriptors for internal use
    atomic_int nioerr;
 
+   static void (*cvmfs_set_cache_drainout_fn)();
+   static void (*cvmfs_unset_cache_drainout_fn)();
+
+   void cvmfs_set_cache_drainout() {
+      if (cvmfs_set_cache_drainout_fn) {
+         (*cvmfs_set_cache_drainout_fn)();
+      }
+   }
+   void cvmfs_unset_cache_drainout() {
+      if (cvmfs_unset_cache_drainout_fn) {
+         (*cvmfs_unset_cache_drainout_fn)();
+      }
+   }
+
    static uint64_t effective_ttl(const uint64_t ttl) {
       pthread_mutex_lock(&mutex_max_ttl);
       const uint64_t current_max = max_ttl;
@@ -1844,7 +1858,9 @@ int cvmfs_common_init(
    const string &cvmfs_opts_whitelist,
    int cvmfs_opts_nofiles,
    bool cvmfs_opts_grab_mountpoint,
-   bool cvmfs_opts_enable_talk
+   bool cvmfs_opts_enable_talk,
+   void (*cvmfs_opts_set_cache_drainout_fn)(),
+   void (*cvmfs_opts_unset_cache_drainout_fn)()
 )
 {
    int err_catalog;
@@ -1890,6 +1906,8 @@ int cvmfs_common_init(
    atomic_init64(&ndownload);
 
    /* Fill cvmfs option variables from arguments */
+   cvmfs::cvmfs_set_cache_drainout_fn = cvmfs_opts_set_cache_drainout_fn;
+   cvmfs::cvmfs_unset_cache_drainout_fn = cvmfs_opts_unset_cache_drainout_fn;
    cvmfs::uid = cvmfs_opts_uid ? cvmfs_opts_uid : getuid();
    cvmfs::gid = cvmfs_opts_gid ? cvmfs_opts_gid : getgid();
    if (cvmfs_opts_max_ttl) cvmfs::max_ttl = cvmfs_opts_max_ttl*60;

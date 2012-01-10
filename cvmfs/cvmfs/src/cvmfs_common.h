@@ -48,7 +48,9 @@ namespace cvmfs {
       const std::string &cvmfs_opts_whitelist,
       int cvmfs_opts_nofiles,
       bool cvmfs_opts_grab_mountpoint,
-      bool cvmfs_opts_enable_talk
+      bool cvmfs_opts_enable_talk,
+      void (*cvmfs_opts_set_cache_drainout_fn)(),
+      void (*cvmfs_opts_unset_cache_drainout_fn)()
    );
    void cvmfs_common_fini();
    void cvmfs_common_spawn();
@@ -60,10 +62,6 @@ namespace cvmfs {
    int cvmfs_getattr(const char *c_path, struct stat *info);
    int cvmfs_getxattr(const char *path, const char *name, char *value, size_t vlen);
    int cvmfs_listdir(const char *path,char ***buf,size_t *buflen);
-
-   /* To be defined by users of cvmfs_common */
-   void cvmfs_set_cache_drainout();
-   void cvmfs_unset_cache_drainout();
 }
 
 

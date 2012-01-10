@@ -28,13 +28,6 @@ extern "C" {
 
 using namespace std;
 
-namespace cvmfs {
-   void cvmfs_set_cache_drainout() {
-   }
-   void cvmfs_unset_cache_drainout() {
-   }
-};
-
 using namespace cvmfs;
 
 /**
@@ -336,7 +329,9 @@ int cvmfs_init(char const *options)
       cvmfs_opts.whitelist,
       cvmfs_opts.nofiles,
       false, /* grab_mountpoint */
-      false  /* enable talk */
+      false, /* enable_talk */
+      NULL,  /* cvmfs_set_cache_drainout_fn */
+      NULL   /* cvmfs_unset_cache_drainout_fn */
    );
    if( rc != 0 ) {
        return -1;
