@@ -57,6 +57,7 @@ namespace cvmfs {
    string root_url = "";
    string root_catalog = "";
    string cachedir = "";
+   string relative_cachedir = "."; /* path to cachedir, relative to current working dir */
    string proxies = "";
    string whitelist = "";
    string blacklist = ""; /* blacklist for compromised certificates */
@@ -360,7 +361,7 @@ namespace cvmfs {
                             bool &cached_copy, const hash::t_sha1 &sha1_expected, const bool dry_run = false)
    {
       const string fskey = (repo_name == "") ? cvmfs::root_url : repo_name;
-      const string lpath_chksum = "./cvmfs.checksum." + make_fs_key(fskey + url_path);
+      const string lpath_chksum = relative_cachedir + "/cvmfs.checksum." + make_fs_key(fskey + url_path);
       const string rpath_chksum = url_path + "/.cvmfspublished";
       bool have_cached = false;
       bool signature_ok = false;
@@ -388,7 +389,7 @@ namespace cvmfs {
       if (fchksum && (fread(tmp, 1, 40, fchksum) == 40)) 
       {
          sha1_local.from_hash_str(string(tmp, 40));
-         cat_file = "./" + string(tmp, 2) + "/" + string(tmp+2, 38);
+         cat_file = relative_cachedir + "/" + string(tmp, 2) + "/" + string(tmp+2, 38);
          
          /* try to get local last modified time */
          char buf_modified;
@@ -593,7 +594,7 @@ namespace cvmfs {
       }
       
       /* load new catalog */
-      const string tmp_file_template = "./cvmfs.catalog.XXXXXX";
+      const string tmp_file_template = relative_cachedir + "/cvmfs.catalog.XXXXXX";
       char *tmp_file = strdupa(tmp_file_template.c_str());
       int tmp_fd = mkstemp(tmp_file);
       if (tmp_fd < 0) return -EIO;
@@ -860,7 +861,7 @@ namespace cvmfs {
          because file is pinned. */
       if ((result == 0) || cached_copy) {
          const string sha1_cat_str = sha1_cat.to_string();
-         const string final_file = "./" + sha1_cat_str.substr(0, 2) + "/" + 
+         const string final_file = relative_cachedir + "/" + sha1_cat_str.substr(0, 2) + "/" + 
                                    sha1_cat_str.substr(2);
          (void)rename(cat_file.c_str(), final_file.c_str());
       }
@@ -1750,6 +1751,8 @@ int cvmfs_init(char const *options)
    if (!cvmfs::gid) cvmfs::gid = getgid();
    if (cvmfs_opts.max_ttl) cvmfs::max_ttl = cvmfs_opts.max_ttl*60;
    cvmfs::cachedir = cvmfs_opts.cachedir;
+   // in libcvmfs, always use an absolute path to cache, because we do not set cwd to cachedir
+   cvmfs::relative_cachedir = cvmfs::cachedir;
    cvmfs::proxies = cvmfs_opts.proxies;
    if (cvmfs_opts.force_signing) cvmfs::force_signing = true;
    cvmfs::pubkey = cvmfs_opts.pubkey;
@@ -1792,7 +1795,7 @@ int cvmfs_init(char const *options)
       
    /* Try to init the cache... this creates a set of directories in 
       cvmfs::cachedir (256 directories named 00..ff) */
-   if (!cache::init(cvmfs::cachedir, cvmfs::root_url, &mutex_download)) {
+   if (!cache::init(cvmfs::relative_cachedir, cvmfs::root_url, &mutex_download)) {
       cerr << "Failed to setup cache in " << cvmfs::cachedir << ": " << strerror(errno) << endl;
       logmsg("failed to setup cache directory %s", cvmfs::cachedir.c_str());
       goto cvmfs_cleanup;
@@ -1820,7 +1823,7 @@ int cvmfs_init(char const *options)
       cvmfs_opts.quota_limit *= 1024*1024;
       cvmfs_opts.quota_threshold *= 1024*1024;
    }
-   if (!lru::init(".", (uint64_t)cvmfs_opts.quota_limit, 
+   if (!lru::init(cvmfs::relative_cachedir, (uint64_t)cvmfs_opts.quota_limit, 
                        (uint64_t)cvmfs_opts.quota_threshold,
                        cvmfs_opts.rebuild_cachedb)) 
    {
