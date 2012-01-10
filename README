@@ -6,9 +6,9 @@ made to code in cvmfs are subject to the license in cvmfs/COPYING
 (BSD).  All modifications and additions in this repository made to
 code in cctools are subject to the license in cctools/COPYING (GPLv2).
 
-The sourcecode tarballs for CVMFS and parrot were downloaded and
-checked into the 'upstream' branch.  The following versions are
-currently used:
+The CVMFS and parrot code was checked out from the project
+subversion repositories and was copied into the 'upstream' branch.
+The following versions are currently used:
 
 cvmfs trunk r3081
 cctools trunk r1660
