@@ -26,7 +26,7 @@ making cvmfs.cc depend on cvmfs_common.cc has been postponed
 for the future.  To see the small changes that were made
 to code copied from cvmfs.cc into cvmfs_common.cc:
 
-git diff cvmfs/cvmfs/src/cvmfs.cc cvmfs/cvmfs/src/cvmfs_common.cc
+diff -up cvmfs/cvmfs/src/cvmfs.cc cvmfs/cvmfs/src/cvmfs_common.cc
 
 
 To build:
