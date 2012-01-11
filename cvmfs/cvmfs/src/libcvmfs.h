@@ -17,6 +17,12 @@ int cvmfs_init(char const *options);
  */
 void cvmfs_fini();
 
+/* Send syslog and debug messages to log_fn instead.  This may (and
+ * probably should) be called before cvmfs_init().  Setting this to
+ * NULL restores the default logging behavior.
+ */
+void cvmfs_set_log_fn( void (*log_fn)(const char *msg) );
+
 /* Open a file in the CVMFS cache.
  *
  * @param[in] path, path to open (e.g. /dir/file, not /cvmfs/repo/dir/file)

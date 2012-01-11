@@ -136,6 +136,11 @@ void cvmfs_dirent_to_stat(struct cvmfs_dirent *d, struct pfs_stat *s)
 	s->st_ctime = d->mtime;
 }
 
+void cvmfs_parrot_logger(const char *msg)
+{
+	debug(D_CVMFS, "%s", msg);
+}
+
 bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 {
 	if(cvmfs_active_filesystem != f) {
@@ -145,6 +150,8 @@ bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 		}
 
 		debug(D_CVMFS, "Initializing libcvmfs with the following options: %s", f->cvmfs_options);
+
+		cvmfs_set_log_fn(cvmfs_parrot_logger);
 
 		int rc = cvmfs_init(f->cvmfs_options);
 		if(rc != 0) {

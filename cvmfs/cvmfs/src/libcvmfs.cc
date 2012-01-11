@@ -345,3 +345,8 @@ int cvmfs_init(char const *options)
 void cvmfs_fini() {
    cvmfs_common_fini();
 }
+
+void cvmfs_set_log_fn( void (*log_fn)(const char *msg) )
+{
+   syslog_set_alt_logger( log_fn );
+}
