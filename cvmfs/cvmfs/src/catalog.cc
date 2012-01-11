@@ -769,6 +769,7 @@ namespace catalog {
       for (int i = 0; i < num_catalogs; ++i)
          detach_intermediate(i);
            
+      db.clear();
       stmts_unlink.clear();
       stmts_update_inode.clear();
       stmts_update.clear();

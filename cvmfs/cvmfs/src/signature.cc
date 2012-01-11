@@ -56,10 +56,22 @@ namespace signature {
    
    void fini() {
       EVP_cleanup();
-      if (ca_store) X509_STORE_free(ca_store);
-      if (certificate) X509_free(certificate);
-      if (privkey) EVP_PKEY_free(privkey);
-      if (pubkey) RSA_free(pubkey);
+      if (ca_store) {
+         X509_STORE_free(ca_store);
+         ca_store = NULL;
+      }
+      if (certificate) {
+         X509_free(certificate);
+         certificate = NULL;
+      }
+      if (privkey) {
+         EVP_PKEY_free(privkey);
+         privkey = NULL;
+      }
+      if (pubkey) {
+         RSA_free(pubkey);
+         pubkey = NULL;
+      }
    }
    
    
