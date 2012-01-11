@@ -119,7 +119,7 @@ static const char *compare_path_prefix(const char *a, const char *b)
 	}
 }
 
-void cvmfs_dirent_to_stat(struct cvmfs_dirent *d, struct pfs_stat *s)
+static void cvmfs_dirent_to_stat(struct cvmfs_dirent *d, struct pfs_stat *s)
 {
 	s->st_dev = 1;
 	s->st_ino = d->inode;
@@ -136,12 +136,12 @@ void cvmfs_dirent_to_stat(struct cvmfs_dirent *d, struct pfs_stat *s)
 	s->st_ctime = d->mtime;
 }
 
-void cvmfs_parrot_logger(const char *msg)
+static void cvmfs_parrot_logger(const char *msg)
 {
 	debug(D_CVMFS, "%s", msg);
 }
 
-bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
+static bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 {
 	if(cvmfs_active_filesystem != f) {
 		if(cvmfs_active_filesystem != NULL) {
@@ -162,7 +162,7 @@ bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 	return true;
 }
 
-struct cvmfs_filesystem *cvmfs_filesystem_create(const char *repo_name, const char *path, const char *user_options)
+static struct cvmfs_filesystem *cvmfs_filesystem_create(const char *repo_name, const char *path, const char *user_options)
 {
 	struct cvmfs_filesystem *f = (struct cvmfs_filesystem *) xxmalloc(sizeof(*f));
 	strcpy(f->host, repo_name);
@@ -187,7 +187,7 @@ struct cvmfs_filesystem *cvmfs_filesystem_create(const char *repo_name, const ch
 			proxy,
 			user_options);
 
-	debug(D_CVMFS, "cvmfs filesystem configured %s with repo path %s and options %s", repo_name, f->path, f->cvmfs_options);
+	debug(D_CVMFS, "filesystem configured %s with repo path %s and options %s", repo_name, f->path, f->cvmfs_options);
 
 	return f;
 }
@@ -265,7 +265,7 @@ static void cvmfs_read_config()
 Recursively destroy a cvmfs filesystem object.
 */
 
-void cvmfs_filesystem_delete(struct cvmfs_filesystem *f)
+static void cvmfs_filesystem_delete(struct cvmfs_filesystem *f)
 {
 	if(!f)
 		return;
@@ -281,33 +281,26 @@ void cvmfs_filesystem_delete(struct cvmfs_filesystem *f)
 	free(f);
 }
 
-/*
-Destroy all internal state for all filesystems.
-This is called whenever a file checksum is found
-to be inconsistent, and the state must be reloaded.
-*/
-
-void cvmfs_filesystem_flush_all()
-{
-	cvmfs_filesystem_delete(cvmfs_filesystem_list);
-	cvmfs_filesystem_list = 0;
-}
-
-cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result)
+static cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result)
 {
 	struct cvmfs_filesystem *f;
 	const char *subpath;
 
-	debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s)", name->host, name->rest);
+	debug(D_CVMFS, "lookup_filesystem(%s,%s)", name->host, name->rest);
 
 	if(!name->host[0]) {
-		debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
+		debug(D_CVMFS, "lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
 		errno = ENOENT;
 		return 0;
 	}
 
 	if( !cvmfs_filesystem_list ) {
 		cvmfs_read_config();
+	}
+	if( !cvmfs_filesystem_list ) {
+		debug(D_CVMFS|D_NOTICE, "No CVMFS filesystems have been configured.  To access CVMFS, you must configure PARROT_CVMFS_REPO.");
+		errno = ENOENT;
+		return 0;
 	}
 
 	for(f = cvmfs_filesystem_list; f; f = f->next) {
@@ -316,20 +309,21 @@ cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result
 			if(!subpath) {
 				subpath = compare_path_prefix(name->rest, f->path);
 				if(subpath) {
-					debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
+					debug(D_CVMFS, "lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
 					errno = ENOENT;
 					return 0;
 				} else {
 					continue;
 				}
 			}
-			debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s) --> %s,%s,%s", name->host, name->rest, f->host, f->path, subpath);
+			debug(D_CVMFS, "lookup_filesystem(%s,%s) --> %s,%s,%s", name->host, name->rest, f->host, f->path, subpath);
 			*subpath_result = subpath;
 			return f;
 		}
 	}
 
-	debug(D_CVMFS, "cvmfs lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
+	debug(D_CVMFS, "lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
+	debug(D_CVMFS|D_NOTICE, "PARROT_CVMFS_REPO does not contain an entry for the CVMFS repository '%s'",name->host);
 	errno = ENOENT;
 	return 0;
 }
@@ -347,7 +341,6 @@ bool cvmfs_dirent::lookup(pfs_name * path, bool follow_symlinks)
 	cvmfs_filesystem *f = lookup_filesystem(path, &subpath);
 
 	if(!f) {
-		errno = EIO;
 		return false;
 	}
 
@@ -437,7 +430,7 @@ class pfs_service_cvmfs:public pfs_service {
 	virtual pfs_file *open(pfs_name * name, int flags, mode_t mode) {
 		struct cvmfs_dirent d;
 
-		debug(D_CVMFS, "cvmfs open(%s,%d,%d)", name->rest, flags, mode);
+		debug(D_CVMFS, "open(%s,%d,%d)", name->rest, flags, mode);
 
 		if(!d.lookup(name, 1)) {
 			return 0;
@@ -453,7 +446,7 @@ class pfs_service_cvmfs:public pfs_service {
 	pfs_dir *getdir(pfs_name * name) {
 		struct cvmfs_dirent d;
 
-		debug(D_CVMFS, "cvmfs getdir(%s)", name->rest);
+		debug(D_CVMFS, "getdir(%s)", name->rest);
 
 		if(!d.lookup(name, 1)) {
 			return 0;
@@ -488,7 +481,7 @@ class pfs_service_cvmfs:public pfs_service {
 	virtual int lstat(pfs_name * name, struct pfs_stat *info) {
 		struct cvmfs_dirent d;
 
-		debug(D_CVMFS, "cvmfs lstat(%s)", name->rest);
+		debug(D_CVMFS, "lstat(%s)", name->rest);
 
 		if(!d.lookup(name, 0)) {
 			return -1;
@@ -503,14 +496,14 @@ class pfs_service_cvmfs:public pfs_service {
 		struct cvmfs_dirent d;
 
 		if(!d.lookup(name, 1)) {
-			debug(D_CVMFS, "cvmfs stat(%s) --> -1 (lookup failed)", name->rest);
+			debug(D_CVMFS, "stat(%s) --> -1 (lookup failed)", name->rest);
 
 			return -1;
 		}
 
 		cvmfs_dirent_to_stat(&d, info);
 
-		debug(D_CVMFS, "cvmfs stat(%s) --> (%d,%d,%d,%d) ISDIR=%d", name->rest, info->st_mode, info->st_size, info->st_mtime, info->st_ino, S_ISDIR(info->st_mode));
+		debug(D_CVMFS, "stat(%s) --> (%d,%d,%d,%d) ISDIR=%d", name->rest, info->st_mode, info->st_size, info->st_mtime, info->st_ino, S_ISDIR(info->st_mode));
 
 		return 0;
 	}
@@ -522,7 +515,7 @@ class pfs_service_cvmfs:public pfs_service {
 
 	virtual int access(pfs_name * name, mode_t mode) {
 		struct pfs_stat info;
-		debug(D_CVMFS, "cvmfs access(%s,%d)", name->rest, mode);
+		debug(D_CVMFS, "access(%s,%d)", name->rest, mode);
 		if(this->stat(name, &info) == 0) {
 			if(mode & W_OK) {
 				errno = EROFS;
@@ -568,7 +561,7 @@ class pfs_service_cvmfs:public pfs_service {
 	virtual int chdir(pfs_name * name, char *newpath) {
 		struct pfs_stat info;
 
-		debug(D_CVMFS, "cvmfs chdir(%s)", name->rest);
+		debug(D_CVMFS, "chdir(%s)", name->rest);
 
 		if(this->stat(name, &info) == 0) {
 			if(S_ISDIR(info.st_mode)) {
@@ -601,14 +594,14 @@ class pfs_service_cvmfs:public pfs_service {
 
 		if(S_ISLNK(d.mode)) {
 			int rc = cvmfs_readlink(name->rest, buf, bufsiz);
-			debug(D_CVMFS, "cvmfs readlink(%s) --> %d", name->rest, rc);
+			debug(D_CVMFS, "readlink(%s) --> %d", name->rest, rc);
 			if(rc < 0) {
 				errno = -rc;
 				return -1;
 			}
 			return strlen(buf);
 		} else {
-			debug(D_CVMFS, "cvmfs readlink(%s) --> -1 (not a link)", name->rest);
+			debug(D_CVMFS, "readlink(%s) --> -1 (not a link)", name->rest);
 			errno = EINVAL;
 			return -1;
 		}
