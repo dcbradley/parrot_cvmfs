@@ -1935,7 +1935,7 @@ int cvmfs_common_init(
       if (cvmfs_opts_hostname[iter_hostname] == ',' || cvmfs_opts_hostname[iter_hostname] == ';') break;
    }
    if (iter_hostname == 0) cvmfs::root_url = "";
-   else cvmfs::root_url = string(cvmfs_opts_hostname, iter_hostname);
+   else cvmfs::root_url = string(cvmfs_opts_hostname, 0, iter_hostname);
       
    if (cvmfs_opts_whitelist.length()) cvmfs::whitelist = cvmfs_opts_whitelist;
    else cvmfs::whitelist = "/.cvmfswhitelist";
