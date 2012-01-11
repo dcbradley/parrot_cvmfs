@@ -34,6 +34,7 @@ extern struct file_cache *pfs_file_cache;
 
 static struct cvmfs_filesystem *cvmfs_filesystem_list = 0;
 static struct cvmfs_filesystem *cvmfs_active_filesystem = 0;
+static bool allow_switching_cvmfs_repos = false;
 
 /*
 A cvmfs_filesystem structure represents an entire
@@ -145,6 +146,24 @@ static bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 {
 	if(cvmfs_active_filesystem != f) {
 		if(cvmfs_active_filesystem != NULL) {
+
+			if(!allow_switching_cvmfs_repos) {
+				debug(D_CVMFS|D_NOTICE,
+					  "ERROR: using multiple CVMFS repositories in a single parrot session "
+					  "is not allowed.  Define PARROT_ALLOW_SWITCHING_CVMFS_REPOSITORIES "
+					  "to enable experimental support, which could result in parrot crashing "
+					  "or performing poorly.");
+				return false;
+			} else {
+				debug(D_CVMFS|D_NOTICE,
+					  "ERROR: using multiple CVMFS repositories in a single parrot session "
+					  "is not fully supported.  PARROT_ALLOW_SWITCHING_CVMFS_REPOSITORIES "
+					  "has been defined, so switching now from %s to %s.  "
+					  "Parrot may crash or perform poorly!",
+					  cvmfs_active_filesystem->host,
+					  f->host);
+			}
+
 			cvmfs_fini();
 			cvmfs_active_filesystem = NULL;
 		}
@@ -204,6 +223,11 @@ static struct cvmfs_filesystem *cvmfs_filesystem_create(const char *repo_name, c
  */
 static void cvmfs_read_config()
 {
+	char *allow_switching = getenv("PARROT_ALLOW_SWITCHING_CVMFS_REPOSITORIES");
+	if( allow_switching && strcmp(allow_switching,"0")!=0) {
+		allow_switching_cvmfs_repos = true;
+	}
+
 	char *cvmfs_options = getenv("PARROT_CVMFS_REPO");
 	if( !cvmfs_options ) {
 		return;
