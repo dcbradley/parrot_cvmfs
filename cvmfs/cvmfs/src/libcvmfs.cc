@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 
 #include "cvmfs_common.h"
+#include "util.h"
 #include "libcvmfs.h"
 
 extern "C" {
@@ -237,10 +238,128 @@ struct cvmfs_opts {
 };
 
 
+/* Expand symlinks in all levels of a path.  Also, expand ".." and
+ * ".".  This also has the side-effect of ensuring that
+ * cvmfs_getattr() is called on all parent paths, which is needed to
+ * ensure proper loading of nested catalogs before the child is
+ * accessed.
+ */
+static int expand_path(char const *path,string &expanded_path,int depth=0)
+{
+   string p_path = get_parent_path(path);
+   string fname = get_file_name(path);
+   int rc;
+
+   if( fname == ".." ) {
+      rc = expand_path(p_path.c_str(),expanded_path,depth);
+      if( rc != 0 ) {
+         return -1;
+      }
+      expanded_path = get_parent_path(expanded_path);
+      if( expanded_path == "" ) {
+         expanded_path = "/";
+      }
+      return 0;
+   }
+
+   string buf;
+   if( p_path != "" ) {
+      rc = expand_path(p_path.c_str(),buf,depth);
+      if( rc != 0 ) {
+         return -1;
+      }
+
+      if( fname == "." ) {
+         expanded_path = buf;
+         return 0;
+      }
+   }
+
+   buf += "/";
+   buf += fname;
+
+   struct stat st;
+   rc = cvmfs::cvmfs_getattr(buf.c_str(),&st);
+   if( rc != 0 ) {
+      errno = -rc;
+      return -1;
+   }
+
+   if( !S_ISLNK(st.st_mode) ) {
+      expanded_path = buf;
+      return 0;
+   }
+
+   if( depth > 1000 ) {
+      // avoid unbounded recursion due to symlinks
+      errno = EMLINK;
+      return -1;
+   }
+
+   // expand symbolic link
+
+   char *ln_buf = (char *)malloc(st.st_size+2);
+   if( !ln_buf ) {
+      errno = ENOMEM;
+      return -1;
+   }
+   rc = cvmfs::cvmfs_readlink(buf.c_str(),ln_buf,st.st_size+2);
+   if( rc != 0 ) {
+      free(ln_buf);
+      errno = -rc;
+      return -1;
+   }
+   if( ln_buf[0] == '/' ) {
+      // symlink is absolute path
+      buf = ln_buf;
+   }
+   else {
+      // symlink is relative path
+      buf = get_parent_path(buf);
+      buf += "/";
+      buf += ln_buf;
+   }
+   free(ln_buf);
+
+   // In case the symlink references other symlinks or contains ".."
+   // or "."  we must now call expand_path on the result.
+
+   return expand_path(buf.c_str(),expanded_path,depth+1);
+}
+
+/* Like expand_path(), but do not expand the final element of the path. */
+static int expand_ppath(char const *path,string &expanded_path)
+{
+   string p_path = get_parent_path(path);
+   string fname = get_file_name(path);
+
+   if( p_path == "" ) {
+      expanded_path = path;
+      return 0;
+   }
+
+   int rc = expand_path(p_path.c_str(),expanded_path);
+   if( rc != 0 ) {
+      return rc;
+   }
+
+   expanded_path += "/";
+   expanded_path += fname;
+
+   return 0;
+}
 
 int cvmfs_open(const char *path)
 {
-   int rc = cvmfs::cvmfs_open(path);
+   string lpath;
+   int rc;
+   rc = expand_path(path,lpath);
+   if( rc < 0 ) {
+      return -1;
+   }
+   path = lpath.c_str();
+
+   rc = cvmfs::cvmfs_open(path);
    if (rc < 0) {
        errno = -rc;
        return -1;
@@ -259,7 +378,15 @@ int cvmfs_close(int fd)
 }
 
 int cvmfs_readlink(const char *path, char *buf, size_t size) {
-   int rc = cvmfs::cvmfs_readlink(path,buf,size);
+   string lpath;
+   int rc;
+   rc = expand_ppath(path,lpath);
+   if( rc < 0 ) {
+      return -1;
+   }
+   path = lpath.c_str();
+
+   rc = cvmfs::cvmfs_readlink(path,buf,size);
    if (rc < 0) {
        errno = -rc;
        return -1;
@@ -267,9 +394,17 @@ int cvmfs_readlink(const char *path, char *buf, size_t size) {
    return 0;
 }
 
-int cvmfs_stat(const char *c_path,struct stat *st)
+int cvmfs_stat(const char *path,struct stat *st)
 { 
-   int rc = cvmfs_getattr(c_path,st);
+   string lpath;
+   int rc;
+   rc = expand_path(path,lpath);
+   if( rc < 0 ) {
+      return -1;
+   }
+   path = lpath.c_str();
+
+   rc = cvmfs_getattr(path,st);
    if( rc < 0 ) {
        errno = -rc;
        return -1;
@@ -279,12 +414,20 @@ int cvmfs_stat(const char *c_path,struct stat *st)
 
 int cvmfs_listdir(const char *path,char ***buf,size_t *buflen)
 {
-    int rc = cvmfs::cvmfs_listdir(path,buf,buflen);
-    if( rc < 0 ) {
-        errno = -rc;
-        return -1;
-    }
-    return 0;
+   string lpath;
+   int rc;
+   rc = expand_path(path,lpath);
+   if( rc < 0 ) {
+      return -1;
+   }
+   path = lpath.c_str();
+
+   rc = cvmfs::cvmfs_listdir(path,buf,buflen);
+   if( rc < 0 ) {
+      errno = -rc;
+      return -1;
+   }
+   return 0;
 }
 
 int cvmfs_init(char const *options)
