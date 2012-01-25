@@ -48,6 +48,7 @@ struct cvmfs_opts {
    string   deep_mount;
    string   blacklist;
    string   repo_name;
+   string   mountpoint;
    bool     force_signing;
    bool     rebuild_cachedb;
    int      nofiles;
@@ -140,6 +141,7 @@ struct cvmfs_opts {
       CVMFS_OPT(nofiles);
       CVMFS_OPT(deep_mount);
       CVMFS_OPT(repo_name);
+      CVMFS_OPT(mountpoint);
       CVMFS_OPT(blacklist);
       CVMFS_OPT(syslog_level);
 
@@ -190,6 +192,14 @@ struct cvmfs_opts {
          if( *next == ',' ) next++;
          options = next;
       }
+
+      if( mountpoint.empty() && !repo_name.empty()) {
+         mountpoint = "/cvmfs/";
+         mountpoint += repo_name;
+      }
+      while( mountpoint.length()>0 && mountpoint[mountpoint.length()-1] == '/' ) {
+         mountpoint.resize(mountpoint.length()-1);
+      }
       return 0;
    }
 
@@ -227,6 +237,7 @@ struct cvmfs_opts {
             " deep_mount=prefix       Path prefix if a repository is mounted on a nested catalog,\n"
             "                         i.e. deep_mount=/software/15.0.1\n"
             " repo_name=<repository>  Unique name of the mounted repository, e.g. atlas.cern.ch\n"
+            " mountpoint=<path>       Path to root of repository, e.g. /cvmfs/atlas.cern.ch\n"
             " blacklist=FILE          Local blacklist for invalid certificates.  Has precedence over the whitelist.\n"
             "                         (Default is /etc/cvmfs/blacklist)\n"
             " syslog_level=NUMBER     Sets the level used for syslog to DEBUG (1), INFO (2), or NOTICE (3).\n"
@@ -237,6 +248,8 @@ struct cvmfs_opts {
    }
 };
 
+/* Path to root of repository.  Used to resolve absolute symlinks. */
+static string mountpoint;
 
 /* Expand symlinks in all levels of a path.  Also, expand ".." and
  * ".".  This also has the side-effect of ensuring that
@@ -253,6 +266,12 @@ static int expand_path(char const *path,string &expanded_path,int depth=0)
    if( fname == ".." ) {
       rc = expand_path(p_path.c_str(),expanded_path,depth);
       if( rc != 0 ) {
+         return -1;
+      }
+      if( expanded_path == "/" ) {
+         // attempt to access parent path of the root of the repository
+         logmsg("libcvmfs cannot resolve symlinks to paths outside of the repository: %s",path);
+         errno = ENOENT;
          return -1;
       }
       expanded_path = get_parent_path(expanded_path);
@@ -292,7 +311,8 @@ static int expand_path(char const *path,string &expanded_path,int depth=0)
 
    if( depth > 1000 ) {
       // avoid unbounded recursion due to symlinks
-      errno = EMLINK;
+      logmsg("libcvmfs hit its symlink recursion limit: %s",path);
+      errno = ELOOP;
       return -1;
    }
 
@@ -311,7 +331,20 @@ static int expand_path(char const *path,string &expanded_path,int depth=0)
    }
    if( ln_buf[0] == '/' ) {
       // symlink is absolute path
-      buf = ln_buf;
+      // convert /cvmfs/repo/blah --> /blah
+	  size_t len = ::mountpoint.length();
+      if( strncmp(ln_buf,::mountpoint.c_str(),len)==0
+          && (ln_buf[len] == '/' || ln_buf[len] == '\0'))
+      {
+         buf = ln_buf+len;
+      }
+      else {
+          logmsg("libcvmfs cannot resolve symlinks to paths outside of the repository: %s --> %s (mountpoint=%s)",
+                 path,ln_buf,::mountpoint.c_str());
+         errno = ENOENT;
+         free(ln_buf);
+         return -1;
+      }
    }
    else {
       // symlink is relative path
@@ -482,11 +515,14 @@ int cvmfs_init(char const *options)
 
    cvmfs_common_spawn();
 
+   ::mountpoint = cvmfs_opts.mountpoint;
+
    return 0;
 }
 
 void cvmfs_fini() {
    cvmfs_common_fini();
+   ::mountpoint = "";
 }
 
 void cvmfs_set_log_fn( void (*log_fn)(const char *msg) )
