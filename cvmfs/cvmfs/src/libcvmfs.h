@@ -50,13 +50,23 @@ int cvmfs_close(int fd);
  */
 int cvmfs_readlink(const char *path, char *buf, size_t size);
 
-/* Get information about a file.
+/* Get information about a file.  If the file is a symlink,
+ * return info about the file it points to, not the symlink itself.
  *
  * @param[in] path, path of file (e.g. /dir/file, not /cvmfs/repo/dir/file)
  * @param[out] st, stat buffer in which to write the result
  * \return 0 on success, -1 on failure (sets errno)
  */
 int cvmfs_stat(const char *path,struct stat *st);
+
+/* Get information about a file.  If the file is a symlink,
+ * return info about the link, not the file it points to.
+ *
+ * @param[in] path, path of file (e.g. /dir/file, not /cvmfs/repo/dir/file)
+ * @param[out] st, stat buffer in which to write the result
+ * \return 0 on success, -1 on failure (sets errno)
+ */
+int cvmfs_lstat(const char *path,struct stat *st);
 
 /* Get list of directory contents.  The directory contents
  * includes "." and "..".

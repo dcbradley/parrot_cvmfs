@@ -445,6 +445,24 @@ int cvmfs_stat(const char *path,struct stat *st)
    return 0;
 }
 
+int cvmfs_lstat(const char *path,struct stat *st)
+{ 
+   string lpath;
+   int rc;
+   rc = expand_ppath(path,lpath);
+   if( rc < 0 ) {
+      return -1;
+   }
+   path = lpath.c_str();
+
+   rc = cvmfs_getattr(path,st);
+   if( rc < 0 ) {
+       errno = -rc;
+       return -1;
+   }
+   return 0;
+}
+
 int cvmfs_listdir(const char *path,char ***buf,size_t *buflen)
 {
    string lpath;

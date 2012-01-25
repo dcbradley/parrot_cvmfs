@@ -374,7 +374,12 @@ bool cvmfs_dirent::lookup(pfs_name * path, bool follow_symlinks)
 	}
 
 	struct stat st;
-	int rc = cvmfs_stat(path->rest, &st);
+	int rc;
+	if( follow_symlinks ) {
+		rc = cvmfs_stat(path->rest, &st);
+	} else {
+		rc = cvmfs_lstat(path->rest, &st);
+	}
 	if(rc != 0) {
 		return false;
 	}
