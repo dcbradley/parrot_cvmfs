@@ -52,10 +52,8 @@ struct cvmfs_filesystem {
 };
 
 /*
-A grow_dirent is a node in a tree representing the
-entire directory structure of a grow_filesystem.
-Each node describes its name, metadata, checksum,
-and children (if a directory)
+A cvmfs_dirent contains information about a node
+in the file tree.
 */
 
 class cvmfs_dirent {
