@@ -10,7 +10,7 @@ The CVMFS and parrot code was checked out from the project
 subversion repositories and was copied into the 'upstream' branch.
 The following versions are currently used:
 
-cvmfs trunk r3081
+cvmfs trunk r3145
 cctools trunk r1660
 
 To see the development that has been done, compare the master
@@ -34,7 +34,7 @@ To build:
 cd cvmfs
 
 cd jemalloc
-tar xjf jemalloc-2.2.1.tar.bz2
+tar xvjf jemalloc-2.2.1.tar.bz2
 mv jemalloc-2.2.1/* src/
 patch -p0 -i jemalloc-2.2.1-64bit_literals.patch
 cd ..
