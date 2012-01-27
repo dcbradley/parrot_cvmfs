@@ -24,7 +24,7 @@ if [ ! -c /dev/fuse ]; then
   exit 1
 fi
 
-mountpoint=$2 
+mountpoint=$2
 shift 2
 
 cvmfs_readconfig $fqrn
@@ -50,7 +50,7 @@ if [ $? -eq 0 ]; then
 fi
 
 repository=`echo $CVMFS_SERVER_URL | sed "s/@org@/$org/g" | sed "s/@fqrn@/$fqrn/g"`
-if [ x$CERNVM_CDN_HOST != x ] 
+if [ x$CERNVM_CDN_HOST != x ]
 then
   mdir=`echo $repository |  cut -d/ -f4-`
   repository="$repository,http://$CERNVM_CDN_HOST/$mdir"
@@ -74,7 +74,7 @@ if [ $? -eq 0 ]
 then
    CVMFS_ID=",uid=$uid,gid=$gid"
 else
-   echo "Error: $CVMFS_USER does not exist." 
+   echo "Error: $CVMFS_USER does not exist."
    exit 1
 fi
 
@@ -87,9 +87,9 @@ fi
 if [ ! -z $CVMFS_TIMEOUT_DIRECT ]; then
    mount_options="$mount_options,timeout_direct=$CVMFS_TIMEOUT_DIRECT"
 fi
- 
 
-while getopts "vfo:" OPTION
+
+while getopts "vfo:n" OPTION
 do
   case $OPTION in
     v)
@@ -99,6 +99,9 @@ do
     ;;
     o)
       mount_options="${mount_options},$OPTARG"
+    ;;
+    n)
+      echo "Note: fusermount _does_ modify /etc/mtab in case it is writable."
     ;;
     ?)
       echo "Invalid option"
@@ -116,7 +119,7 @@ if [ "x$CVMFS_TRACEFILE" != "x" ]; then
   mount_options="${mount_options},tracefile=$CVMFS_TRACEFILE"
 fi
 if [ "x$CVMFS_SYSLOG_LEVEL" != "x" ]; then
-  mount_options="${mount_options},syslog_level=$CVMFS_SYSLOG_LEVEL"  
+  mount_options="${mount_options},syslog_level=$CVMFS_SYSLOG_LEVEL"
 fi
 if [ "x$CVMFS_FORCE_SIGNING" == "xyes" ]; then
   mount_options="${mount_options},force_signing"
@@ -155,17 +158,7 @@ else
   else
     /bin/sh -c "$cmd"
   fi
-  retval=$?
+  exit $?
 fi
 
-if [ $retval -eq 0 ]; then
-  grep -q "^cvmfs2 $mountpoint fuse " /etc/mtab
-  if [ $? -eq 0 ]; then
-    sed -i "s|^cvmfs2 $mountpoint fuse \(.*\)|cvmfs2 $mountpoint cvmfs \1|" /etc/mtab 
-  else
-    grep "^cvmfs2 $mountpoint fuse " /proc/mounts | sed "s|^cvmfs2 $mountpoint fuse \(.*\)|cvmfs2 $mountpoint cvmfs \1|" >> /etc/mtab
-  fi
-fi
-
-exit $retval
 

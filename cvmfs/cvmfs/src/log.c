@@ -1,13 +1,21 @@
 
+#define _GNU_SOURCE /* for vasprintf */
+
 #include "log.h"
 #include "smalloc.h"
 
+#include <stdio.h>
 #include <syslog.h>
 #include <string.h>
 #include <stdlib.h>
 
 static int syslog_level = LOG_NOTICE;
 static char *log_prefix = NULL;
+static void (*alt_logger_fn)(const char *msg) = NULL;
+
+void syslog_set_alt_logger(void (*logger_fn)(const char *msg)) {
+   alt_logger_fn = logger_fn;
+}
 
 void syslog_setlevel(const int level) {
    switch (level) {
@@ -58,7 +66,15 @@ void logmsg(const char *msg, ...) {
    }
 	
    va_start(vl, msg);
-   vsyslog(LOG_MAKEPRI(LOG_USER, syslog_level), 
-           tagged_msg, vl);
+   if( alt_logger_fn ) {
+       char *buf = NULL;
+       if( vasprintf(&buf,tagged_msg,vl) != -1 ) {
+           (*alt_logger_fn)(buf);
+           free(buf);
+       }
+   } else {
+      vsyslog(LOG_MAKEPRI(LOG_USER, syslog_level), 
+              tagged_msg, vl);
+   }
    va_end(vl);
 }

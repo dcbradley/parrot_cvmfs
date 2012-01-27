@@ -4,6 +4,7 @@ if BUILD_CVMFS
 bin_PROGRAMS += cvmfs2 cvmfs2_debug cvmfs_fsck cvmfs_proxy_rtt 
 dist_bin_SCRIPTS += cvmfs-talk cvmfs_config
 noinst_PROGRAMS = testtracer 
+noinst_LIBRARIES = libcvmfs.a
 endif
 if BUILD_SERVER
 bin_PROGRAMS += cvmfs_zpipe cvmfs_sync.bin cvmfs_sign cvmfs_clgcmp cvmfs_lscat cvmfs_pull cvmfs_scrub
@@ -12,6 +13,7 @@ noinst_PROGRAMS = cvmfs_fixinodes
 endif
 
 
+libcvmfs_a_SOURCES =
 cvmfs2_debug_SOURCES =
 cvmfs2_SOURCES =
 cvmfs_fsck_SOURCES =
@@ -27,6 +29,7 @@ cvmfs_pull_SOURCES =
 cvmfs_scrub_SOURCES =
 
 if ! SYSTEM_SQLITE3
+libcvmfs_a_SOURCES += ../../sqlite3/src/sqlite3.h
 cvmfs2_debug_SOURCES += ../../sqlite3/src/sqlite3.h
 cvmfs_sync_bin_SOURCES += ../../sqlite3/src/sqlite3.h
 cvmfs_clgcmp_SOURCES += ../../sqlite3/src/sqlite3.h
@@ -36,6 +39,7 @@ cvmfs_pull_SOURCES += ../../sqlite3/src/sqlite3.h
 endif
 
 if ! SYSTEM_LIBCURL
+libcvmfs_a_SOURCES += ../../libcurl/src/include/curl/curl.h
 cvmfs2_debug_SOURCES += ../../libcurl/src/include/curl/curl.h
 cvmfs_pull_SOURCES += ../../libcurl/src/include/curl/curl.h
 endif
@@ -46,6 +50,7 @@ cvmfs2_debug_SOURCES += ../../libfuse/src/include/fuse_opt.h
 endif
 
 if ! SYSTEM_ZLIB
+libcvmfs_a_SOURCES += ../../zlib/src/zlib.h
 cvmfs2_debug_SOURCES += ../../zlib/src/zlib.h
 cvmfs_pull_SOURCES += ../../zlib/src/zlib.h
 cvmfs_sync_bin_SOURCES += ../../zlib/src/zlib.h
@@ -58,6 +63,26 @@ cvmfs_zpipe_SOURCES += ../../zlib/src/zlib.h
 cvmfs_proxy_rtt_SOURCES += ../../zlib/src/zlib.h
 endif
 
+libcvmfs_a_SOURCES += smalloc.h smalloc.c \
+   log.c log.h \
+   tracer.h tracer.cc atomic.h \
+   catalog_tree.h catalog_tree.cc \
+   sqlite3-duplex.h catalog.h catalog.cc \
+   curl-duplex.h fuse-duplex.h \
+   signature.h signature.cc \
+   lru.h lru.cc \
+   hash.h hash.cc \
+   cache.h cache.cc \
+   talk.h talk.cc \
+   monitor.h monitor.cc \
+   util.cc util.h \
+   zlib-duplex.h compression.h compression.c \
+   sha1.h sha1.c \
+   md5.h \
+   debug.h debug.c \
+   http_curl.h http_curl.c \
+   cvmfs_common.h cvmfs_common.cc \
+   libcvmfs.h libcvmfs.cc
 cvmfs2_debug_SOURCES += smalloc.h smalloc.c \
    log.c log.h \
    tracer.h tracer.cc atomic.h \
@@ -215,7 +240,7 @@ CFLAGS_CVMFS2 += -I../../zlib/src
 endif
 cvmfs2_debug_LDADD += ../../jemalloc/src/lib/libjemalloc.a
 cvmfs2_LDADD += ../../jemalloc/src/lib/libjemalloc.a
-CFLAGS_CVMFS2 += $(PTHREAD_CFLAGS) $(CURL_CFLAGS) $(SQLITE_CFLAGS) $(OPENSSL_CFLAGS) $(FUSE_CFLAGS) -DCVMFS_CLIENT
+CFLAGS_CVMFS2 += $(PTHREAD_CFLAGS) $(CURL_CFLAGS) $(SQLITE_CFLAGS) $(OPENSSL_CFLAGS) $(FUSE_CFLAGS) -DCVMFS_CLIENT -DFUSE_CLIENT
 LDFLAGS_CVMFS2 = $(CVMFS_LIBS) $(PTHREAD_CFLAGS) $(PTHREAD_LIBS) $(CURL_LIBS) $(SQLITE_LIBS) $(OPENSSL_LIBS) $(FUSE_LIBS) $(Z_LIBS) -lrt -rdynamic 
 cvmfs2_debug_CXXFLAGS = $(CVMFS_CXXFLAGS) $(CFLAGS_CVMFS2) -O0
 cvmfs2_debug_CFLAGS   = $(CVMFS_CFLAGS) $(CFLAGS_CVMFS2) -O0
@@ -223,6 +248,23 @@ cvmfs2_debug_LDFLAGS = $(LDFLAGS_CVMFS2)
 cvmfs2_CXXFLAGS = $(CVMFS_CXXFLAGS) $(CFLAGS_CVMFS2) -DNDEBUGMSG
 cvmfs2_CFLAGS   = $(CVMFS_CFLAGS) $(CFLAGS_CVMFS2) -DNDEBUGMSG
 cvmfs2_LDFLAGS = $(LDFLAGS_CVMFS2)
+
+CFLAGS_LIBCVMFS_A = 
+if ! SYSTEM_SQLITE3
+CFLAGS_LIBCVMFS_A += -I../../sqlite3/src
+endif
+if ! SYSTEM_LIBCURL
+CFLAGS_LIBCVMFS_A += -I../../libcurl/src/include
+endif
+if ! SYSTEM_LIBFUSE
+CFLAGS_LIBCVMFS_A += -I../../libfuse/src/include
+endif
+if ! SYSTEM_ZLIB
+CFLAGS_LIBCVMFS_A += -I../../zlib/src
+endif
+CFLAGS_LIBCVMFS_A += $(PTHREAD_CFLAGS) $(CURL_CFLAGS) $(SQLITE_CFLAGS) $(OPENSSL_CFLAGS) $(FUSE_CFLAGS) -DCVMFS_CLIENT
+libcvmfs_a_CXXFLAGS = $(CVMFS_CXXFLAGS) $(CFLAGS_LIBCVMFS_A) -DNDEBUGMSG
+libcvmfs_a_CFLAGS   = $(CVMFS_CFLAGS) $(CFLAGS_LIBCVMFS_A) -DNDEBUGMSG
 
 
 CFLAGS_FSCK =

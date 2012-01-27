@@ -20,6 +20,7 @@
 #include "hash.h"
 
 #include <string>
+#include <vector>
 
 #include <cstdio>
 #include <cstring>
@@ -33,6 +34,8 @@
 #include <openssl/rsa.h>
 #include <openssl/engine.h>
 
+#include "util.h"
+
 extern "C" {
    #include "sha1.h"
    #include "smalloc.h"
@@ -41,31 +44,45 @@ extern "C" {
 using namespace std;
 
 namespace signature {
-   
+
    EVP_PKEY *privkey = NULL;
    X509 *certificate = NULL;
    X509_STORE *ca_store = NULL; ///< Contains the CA-Chain until the self-signed root
-   RSA *pubkey = NULL; ///< Contains cvmfs master public key
-   
+   const string default_pubkey = "/etc/cvmfs/keys/cern.ch.pub";
+   vector<RSA *> pubkeys; ///< Contains cvmfs master public key
+
    void init() {
       OpenSSL_add_all_algorithms();
       ca_store = X509_STORE_new();
       X509_STORE_set_default_paths(ca_store);
    }
-   
-   
+
+
    void fini() {
       EVP_cleanup();
-      if (ca_store) X509_STORE_free(ca_store);
-      if (certificate) X509_free(certificate);
-      if (privkey) EVP_PKEY_free(privkey);
-      if (pubkey) RSA_free(pubkey);
+      if (ca_store) {
+         X509_STORE_free(ca_store);
+         ca_store = NULL;
+      }
+      if (certificate) {
+         X509_free(certificate);
+         certificate = NULL;
+      }
+      if (privkey) {
+         EVP_PKEY_free(privkey);
+         privkey = NULL;
+      }
+      if (!pubkeys.empty()) {
+         for (unsigned i = 0; i < pubkeys.size(); ++i)
+            RSA_free(pubkeys[i]);
+         pubkeys.clear();
+      }
    }
-   
-   
+
+
    /**
     * @param[in] file_pem File name of the PEM key file
-    * @param[in] password Password for the private key. 
+    * @param[in] password Password for the private key.
     *     Password is not saved internally, but the private key is.
     * \return True on success, false otherwise
     */
@@ -73,15 +90,15 @@ namespace signature {
       bool result;
       FILE *fp = NULL;
       char *tmp = strdupa(password.c_str());
-      
+
       if ((fp = fopen(file_pem.c_str(), "r")) == NULL)
          return false;
       result = (privkey = PEM_read_PrivateKey(fp, NULL, NULL, tmp)) != NULL;
       fclose(fp);
       return result;
    }
-   
-   
+
+
    /**
     * Clears the memory storing the private key
     */
@@ -89,8 +106,8 @@ namespace signature {
       if (privkey) EVP_PKEY_free(privkey);
       privkey = NULL;
    }
-   
-   
+
+
    /**
     * Loads a certificate of a CA to the CA-chain.
     * Don't use catted-PEM files here, only one CA per file.
@@ -100,12 +117,12 @@ namespace signature {
    bool load_ca2chain(const string file_pem) {
       if (ca_store == NULL)
          return false;
-         
+
       bool result;
       char *tmp = strdupa("");
       FILE *fp = NULL;
       X509 *ca_cert;
-      
+
       if ((fp = fopen(file_pem.c_str(), "r")) == NULL)
          return false;
 
@@ -121,16 +138,16 @@ namespace signature {
       fclose(fp);
       return result;
    }
-   
+
 /*   bool load_crl2chain(string file_pem) {
       if (ca_store == NULL)
          return false;
-         
+
       bool result;
       char *tmp = strdupa("");
       FILE *fp = NULL;
       X509_CRL *crl;
-      
+
       if ((fp = fopen(file_pem.c_str(), "r")) == NULL)
          return false;
 
@@ -146,8 +163,8 @@ namespace signature {
       fclose(fp);
       return result;
    }*/
-   
-   
+
+
    /**
     * Loads the current active certificate.  This certificate is used
     * for signature verification.
@@ -160,11 +177,11 @@ namespace signature {
          X509_free(certificate);
          certificate = NULL;
       }
-         
+
       bool result;
       char *nopwd = strdupa("");
       FILE *fp;
-      
+
       if ((fp = fopen(file_pem.c_str(), "r")) == NULL)
          return false;
       if ((certificate = PEM_read_X509_AUX(fp, NULL, NULL, nopwd)) == NULL)
@@ -178,16 +195,16 @@ namespace signature {
          } else
             result = true;
       }
-      
+
       if (!result && certificate) {
          X509_free(certificate);
          certificate = NULL;
       }
-      
+
       fclose(fp);
       return result;
    }
-   
+
    /**
     * See the function that loads the certificate from file.
     */
@@ -196,10 +213,10 @@ namespace signature {
          X509_free(certificate);
          certificate = NULL;
       }
-         
+
       bool result;
       char *nopwd = strdupa("");
-      
+
       BIO *mem = BIO_new(BIO_s_mem());
       if (!mem) return false;
       if (BIO_write(mem, buf, buf_size) <= 0) {
@@ -218,43 +235,52 @@ namespace signature {
             result = true;
       }
       BIO_free(mem);
-      
+
       if (!result && certificate) {
          X509_free(certificate);
          certificate = NULL;
       }
-      
+
       return result;
    }
-   
+
    /**
-    * Loads a public RSA key.
+    * Loads a set of public RSA keys separated by ":".
     */
-   bool load_public_key(const string file_pem) {
-      if (pubkey) {
-         RSA_free(pubkey);
-         pubkey = NULL;
+   bool load_public_keys(const string file_list) {
+      if (!pubkeys.empty()) {
+         for (unsigned i = 0; i < pubkeys.size(); ++i)
+            RSA_free(pubkeys[i]);
+         pubkeys.clear();
       }
-         
+
+      if (file_list == "")
+         return true;
+      const vector<string> pem_files = split_string(file_list, ':');
+
       char *nopwd = strdupa("");
       FILE *fp;
-      
-      if ((fp = fopen(file_pem.c_str(), "r")) == NULL)
-         return false;
-      EVP_PKEY *k;
-      if ((k = PEM_read_PUBKEY(fp, NULL, NULL, nopwd)) == NULL) {
+
+      for (unsigned i = 0, s = pem_files.size(); i < s; ++i) {
+         if ((fp = fopen(pem_files[i].c_str(), "r")) == NULL)
+            return false;
+         EVP_PKEY *k;
+         if ((k = PEM_read_PUBKEY(fp, NULL, NULL, nopwd)) == NULL) {
+            fclose(fp);
+            return false;
+         }
          fclose(fp);
-         return false;
+         pubkeys.push_back(EVP_PKEY_get1_RSA(k));
+         EVP_PKEY_free(k);
+         if (pubkeys[i] == NULL)
+            return false;
       }
-      fclose(fp);
-      pubkey = EVP_PKEY_get1_RSA(k);
-      EVP_PKEY_free(k);
-      
-      return pubkey != NULL;
+
+      return true;
    }
-   
+
    /**
-    * Returns sha1 hash from DER encoded certificate, 
+    * Returns sha1 hash from DER encoded certificate,
     * encoded as openssl does (01:AB:...).
     * Empty string on failure.
     *
@@ -262,7 +288,7 @@ namespace signature {
     */
    string fingerprint() {
       if (!certificate) return "";
-      
+
       int buf_size;
       unsigned char *buf = NULL;
 
@@ -272,7 +298,7 @@ namespace signature {
       hash::t_sha1 sha1;
       sha1_mem(buf, (unsigned)buf_size, sha1.digest);
       free(buf);
-      
+
       const string sha1_str = sha1.to_string();
       string result;
       for (unsigned i = 0; i < sha1_str.length(); ++i) {
@@ -281,14 +307,14 @@ namespace signature {
       }
       return result;
    }
-   
+
    /**
     * \return Some information about the loaded certificate.
     */
    string whois() {
       if (!certificate)
          return "No certificate loaded";
-      
+
       string result;
       X509_NAME *subject = X509_get_subject_name(certificate);
       X509_NAME *issuer = X509_get_issuer_name(certificate);
@@ -305,8 +331,8 @@ namespace signature {
       }
       return result;
    }
-   
-   
+
+
    /**
     * Writes the currently loaded certificate into a PEM file.
     *
@@ -315,7 +341,7 @@ namespace signature {
    bool write_certificate(const string file_pem) {
       int result;
       FILE *fp;
-      
+
       if (!certificate)
          return false;
       if ((fp = fopen(file_pem.c_str(), "w")) == NULL)
@@ -324,8 +350,8 @@ namespace signature {
       fclose(fp);
       return result;
    }
-   
-   
+
+
    bool write_certificate(void **buf, unsigned *buf_size) {
       BIO *mem = BIO_new(BIO_s_mem());
       if (!mem) return false;
@@ -333,16 +359,16 @@ namespace signature {
          BIO_free(mem);
          return false;
       }
-      
+
       void *bio_buf;
       *buf_size = BIO_get_mem_data(mem, &bio_buf);
       *buf = smalloc(*buf_size);
       memcpy(*buf, bio_buf, *buf_size);
       BIO_free(mem);
-      return true;      
+      return true;
    }
-   
-   
+
+
    /**
     * Checks, whether the loaded certificate and the loaded private key match.
     *
@@ -351,7 +377,7 @@ namespace signature {
    bool keys_match() {
       if (!certificate || !privkey)
          return false;
-         
+
       bool result = false;
       char buf[] = "test";
       void *sig = NULL;
@@ -364,8 +390,8 @@ namespace signature {
       if (sig) free(sig);
       return result;
    }
-   
-   
+
+
    /**
     * Signs a data block using the loaded private key.
     *
@@ -376,10 +402,10 @@ namespace signature {
          sig_size = 0;
          return false;
       }
-         
+
       bool result = false;
       EVP_MD_CTX ctx;
-      
+
       *sig = smalloc(EVP_PKEY_size(privkey));
       EVP_MD_CTX_init(&ctx);
       if (EVP_SignInit(&ctx, EVP_sha1()) &&
@@ -396,8 +422,8 @@ namespace signature {
 
       return result;
    }
-   
-   
+
+
    /**
     * Veryfies a signature against loaded certificate.
     *
@@ -406,10 +432,10 @@ namespace signature {
    bool verify(const void *buf, const unsigned buf_size, const void *sig, const unsigned sig_size) {
       if (!certificate)
          return false;
-         
+
       bool result = false;
       EVP_MD_CTX ctx;
-      
+
       EVP_MD_CTX_init(&ctx);
       if (EVP_VerifyInit(&ctx, EVP_sha1()) &&
           EVP_VerifyUpdate(&ctx, buf, buf_size) &&
@@ -418,11 +444,11 @@ namespace signature {
          result = true;
       }
       EVP_MD_CTX_cleanup(&ctx);
-      
+
       return result;
    }
-   
-   
+
+
    /**
     * The signature can also be given by a file (see the other verify()).
     */
@@ -433,12 +459,12 @@ namespace signature {
       unsigned sig_size = 0;
       unsigned sig_cap = 512;
       int have;
-      
+
       if ((fp = fopen(file_sig.c_str(), "r")) == NULL)
          return false;
-      
+
       void *sig = smalloc(sig_cap);
-      
+
       do {
          have = fread(sig_buf, 1, 512, fp);
          if (sig_size + have > sig_cap) {
@@ -448,39 +474,46 @@ namespace signature {
          memcpy((unsigned char *)sig+sig_size, sig_buf, have);
          sig_size += have;
       } while (have == 512);
-      
+
       result = verify(buf, buf_size, sig, sig_size);
-      
+
       free(sig);
       fclose(fp);
-      return result;     
-   }
-   
-   
-   /**
-    * Veryfies a signature against loaded public key.
-    *
-    * \return True if signature is valid, false on error or otherwise
-    */
-   bool verify_rsa(const void *buf, const unsigned buf_size, const void *sig, const unsigned sig_size) {
-      if (!pubkey)
-         return false;
-      if (buf_size > (unsigned)RSA_size(pubkey))
-         return false;
-      
-      unsigned char *to = (unsigned char *)alloca(RSA_size(pubkey));
-      unsigned char *from = (unsigned char *)alloca(sig_size);
-      memcpy(from, sig, sig_size);
-      
-      int size;
-      if ((size = RSA_public_decrypt(sig_size, from, to, pubkey, RSA_PKCS1_PADDING)) < 0)
-         return false;
-            
-      return ((unsigned)size == buf_size) && (memcmp(buf, to, size) == 0);
+      return result;
    }
 
-   
-   
+
+   /**
+    * Veryfies a signature against all loaded public key.
+    *
+    * \return True if signature is valid with any public key, false on error or otherwise
+    */
+   bool verify_rsa(const void *buf, const unsigned buf_size, const void *sig, const unsigned sig_size) {
+      for (unsigned i = 0, s = pubkeys.size(); i < s; ++i) {
+         if (buf_size > (unsigned)RSA_size(pubkeys[i]))
+            continue;
+
+         unsigned char *to = (unsigned char *)smalloc(RSA_size(pubkeys[i]));
+         unsigned char *from = (unsigned char *)smalloc(sig_size);
+         memcpy(from, sig, sig_size);
+
+         int size = RSA_public_decrypt(sig_size, from, to, pubkeys[i], RSA_PKCS1_PADDING);
+         free(from);
+         if ((size >= 0) && ((unsigned)size == buf_size) &&
+              (memcmp(buf, to, size) == 0))
+         {
+            free(to);
+            return true;
+         }
+
+         free(to);
+      }
+
+      return false;
+   }
+
+
+
    /**
     * Adds verbosity.
     */
@@ -488,10 +521,10 @@ namespace signature {
       char buf[121];
       string err;
       //ERR_print_errors_fp(stderr);
-      while (ERR_peek_error() != 0) { 
+      while (ERR_peek_error() != 0) {
          ERR_error_string(ERR_get_error(), buf);
          err += string(buf);
-      } 
+      }
       return err;
    }
 }

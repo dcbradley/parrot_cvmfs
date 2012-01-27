@@ -1,35 +1,20 @@
 /**
- * \file cvmfs.cc
+ * \file cvmfs_common.cc
  * \namespace cvmfs
  *
- * CernVM-FS is a FUSE module which implements an HTTP read-only filesystem.
- * The original idea is based on GROW-FS.
- *
- * CernVM-FS shows a remote HTTP directory as local file system.  The client
- * sees all available files.  On first access, a file is downloaded and
- * cached locally.  All downloaded pieces are verified with SHA1.
- *
- * To do so, a directory hive has to be transformed into a CVMFS2
- * "repository".  This can be done by the CernVM-FS server tools.
- *
- * This preparation of directories is transparent to web servers and
- * web proxies.  They just serve static content, i.e. arbitrary files.
- * Any HTTP server should do the job.  We use Apache + Squid.  Serving
- * files from the memory of a web proxy brings significant performance
- * improvement.
- *
+ * This file contains CVMFS client functions intended for use by both
+ * the FUSE module and libcvmfs.  It was copied from the FUSE module
+ * cvmfs.cc, removing the bits that were FUSE-specific, and making
+ * a few small modifications to make it useable in libcvmfs.
  *
  * Developed by Jakob Blomer 2009 at CERN
  * jakob.blomer@cern.ch
  */
 
-#define FUSE_USE_VERSION 25
 #define _FILE_OFFSET_BITS 64
 #define ENOATTR ENODATA /* instead including attr/xattr.h */
 
 #include "config.h"
-
-#include "fuse-duplex.h"
 
 #include <string>
 #include <iostream>
@@ -50,6 +35,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
+#include <sys/statvfs.h>
 #include <sys/wait.h>
 #include <sys/errno.h>
 #include <sys/mount.h>
@@ -73,6 +59,7 @@
 #include "lru.h"
 #include "util.h"
 #include "atomic.h"
+#include "cvmfs_common.h"
 
 extern "C" {
    #include "debug.h"
@@ -92,6 +79,7 @@ namespace cvmfs {
    string root_url = "";
    string root_catalog = "";
    string cachedir = "/var/cache/cvmfs2/default";
+   string relative_cachedir = "."; /* path to cachedir, relative to current working dir */
    string proxies = "";
    string whitelist = "";
    string blacklist = "/etc/cvmfs/blacklist"; /* blacklist for compromised certificates */
@@ -99,6 +87,7 @@ namespace cvmfs {
    string repo_name = ""; ///< Expected reposiotry name, e.g. atlas.cern.ch
    const double whitelist_lifetime = 3600.0*24.0*30.0; ///< 30 days in seconds
    const int short_term_ttl = 240; /* in offline mode, check every 4 minutes */
+   string pubkey = "/etc/cvmfs/keys/cern.ch.pub";
    string tracefile = "";
    uid_t uid = 0;                ///< will be set to uid of launching user.
    gid_t gid = 0;                ///< will be set to gid of launching user.
@@ -146,9 +135,23 @@ namespace cvmfs {
    atomic_int64 ndownload;
 
    atomic_int open_files; ///< number of currently open files by Fuse calls
-   unsigned nofiles; ///< maximum allowed number of open files
+   unsigned nofiles; ///< maximum allowed number of open files (0 if no limit)
    const int NUM_RESERVED_FD = 512; ///< number of reserved file descriptors for internal use
    atomic_int nioerr;
+
+   static void (*cvmfs_set_cache_drainout_fn)();
+   static void (*cvmfs_unset_cache_drainout_fn)();
+
+   void cvmfs_set_cache_drainout() {
+      if (cvmfs_set_cache_drainout_fn) {
+         (*cvmfs_set_cache_drainout_fn)();
+      }
+   }
+   void cvmfs_unset_cache_drainout() {
+      if (cvmfs_unset_cache_drainout_fn) {
+         (*cvmfs_unset_cache_drainout_fn)();
+      }
+   }
 
    static uint64_t effective_ttl(const uint64_t ttl) {
       pthread_mutex_lock(&mutex_max_ttl);
@@ -387,7 +390,7 @@ namespace cvmfs {
                             bool &cached_copy, const hash::t_sha1 &sha1_expected, const bool dry_run = false)
    {
       const string fskey = (repo_name == "") ? cvmfs::root_url : repo_name;
-      const string lpath_chksum = "./cvmfs.checksum." + make_fs_key(fskey + url_path);
+      const string lpath_chksum = relative_cachedir + "/cvmfs.checksum." + make_fs_key(fskey + url_path);
       const string rpath_chksum = url_path + "/.cvmfspublished";
       bool have_cached = false;
       bool signature_ok = false;
@@ -415,7 +418,7 @@ namespace cvmfs {
       if (fchksum && (fread(tmp, 1, 40, fchksum) == 40))
       {
          sha1_local.from_hash_str(string(tmp, 40));
-         cat_file = "./" + string(tmp, 2) + "/" + string(tmp+2, 38);
+         cat_file = relative_cachedir + "/" + string(tmp, 2) + "/" + string(tmp+2, 38);
 
          /* try to get local last modified time */
          char buf_modified;
@@ -620,7 +623,7 @@ namespace cvmfs {
       }
 
       /* load new catalog */
-      const string tmp_file_template = "./cvmfs.catalog.XXXXXX";
+      const string tmp_file_template = relative_cachedir + "/cvmfs.catalog.XXXXXX";
       char *tmp_file = strdupa(tmp_file_template.c_str());
       int tmp_fd = mkstemp(tmp_file);
       if (tmp_fd < 0) return -EIO;
@@ -887,7 +890,7 @@ namespace cvmfs {
          because file is pinned. */
       if ((result == 0) || cached_copy) {
          const string sha1_cat_str = sha1_cat.to_string();
-         const string final_file = "./" + sha1_cat_str.substr(0, 2) + "/" +
+         const string final_file = relative_cachedir + "/" + sha1_cat_str.substr(0, 2) + "/" +
                                    sha1_cat_str.substr(2);
          (void)rename(cat_file.c_str(), final_file.c_str());
       }
@@ -1098,7 +1101,7 @@ namespace cvmfs {
                                  catalog_tree::get_catalog(0)->path, new_catalog);
       pmesg(D_CVMFS, "Check for new catalog returned %d", result);
       if (result == 1) {
-         fuse_set_cache_drainout();
+         cvmfs_set_cache_drainout();
          drainout_deadline = time(NULL) + max_cache_timeout;
          next_root = new_catalog;
       }
@@ -1118,7 +1121,7 @@ namespace cvmfs {
     * all the inserts here, even though stat will be called before anything else;
     * they might be cached by the kernel.
     */
-   static int cvmfs_getattr(const char *c_path, struct stat *info) {
+   int cvmfs_getattr(const char *c_path, struct stat *info) {
       /* use the cache only, don't contact the server */
       pmesg(D_CVMFS, "stat %s", c_path);
       const string path = string(c_path);
@@ -1142,7 +1145,7 @@ namespace cvmfs {
          int result = load_and_attach_catalog(catalog::get_catalog_url(0),
                                               hash::t_md5(catalog::get_root_prefix_specific(0)),
                                               catalog_tree::get_catalog(0)->path, 0, false, next_root);
-         fuse_unset_cache_drainout();
+         cvmfs_unset_cache_drainout();
          drainout_deadline = 0;
 
          if (result != 0) {
@@ -1177,7 +1180,7 @@ namespace cvmfs {
          }
 
          if (result == 1) {
-            fuse_set_cache_drainout();
+            cvmfs_set_cache_drainout();
             drainout_deadline = time(NULL) + max_cache_timeout;
             next_root = new_catalog;
          }
@@ -1273,7 +1276,7 @@ namespace cvmfs {
    /**
     * Reads a symlink from the catalog.  Environment variables are expanded.
     */
-   static int cvmfs_readlink(const char *path, char *buf, size_t size) {
+   int cvmfs_readlink(const char *path, char *buf, size_t size) {
       const hash::t_md5 md5(catalog::mangled_path(path));
       Tracer::trace(Tracer::FUSE_READLINK, path, "readlink() call");
 
@@ -1308,93 +1311,12 @@ namespace cvmfs {
 
 
    /**
-    * The ls-callback. If we hit a nested catalog, we load it.
-    */
-   static int cvmfs_readdir(const char *path,
-                            void *buf,
-                            fuse_fill_dir_t filler,
-                            off_t offset __attribute__((unused)),
-                            struct fuse_file_info *fi __attribute__((unused)))
-   {
-      /* Read a directory structure, this is enough to be able to navigate through
-         a filesystem */
-      struct stat info;
-      const hash::t_md5 md5 = hash::t_md5(catalog::mangled_path(path));
-
-      pmesg(D_CVMFS, "readdir %s", path);
-
-      Tracer::trace(Tracer::FUSE_LS, path, "ls() call");
-
-      struct catalog::t_dirent d;
-      catalog::lock();
-      if (lookup_cache(md5, d)) {
-         pmesg(D_CVMFS, "catalog cache HIT");
-         if (d.catalog_id < 0) {
-            catalog::unlock();
-            return -ENOENT;
-         }
-      } else {
-         if (!catalog::lookup_informed_unprotected(md5, find_catalog_id(path), d)) {
-            catalog::unlock();
-            return -ENOENT;
-         }
-      }
-      /* Maybe we have to load the nested catalog */
-      if (d.flags & catalog::DIR_NESTED) {
-         pmesg(D_CVMFS, "listing nested catalog at %s (first time access)", path);
-         hash::t_sha1 expected_clg;
-         if (!catalog::lookup_nested_unprotected(
-             d.catalog_id, catalog::mangled_path(path), expected_clg))
-         {
-            catalog::unlock();
-            logmsg("Nested catalog at %s not found (ls)", path);
-            return -ENOENT;
-         }
-
-         int result = load_and_attach_catalog(path,
-            hash::t_md5(catalog::mangled_path(path)), path, -1, false, expected_clg);
-         if (result != 0) {
-            catalog::unlock();
-            atomic_inc(&nioerr);
-            return result;
-         }
-      }
-
-      pmesg(D_CVMFS, "Found entry %s in catalog %d, check if directory", d.name.c_str(), d.catalog_id);
-      if(!S_ISDIR(d.mode)) {
-         catalog::unlock();
-         return -ENOTDIR;
-      }
-
-      d.to_stat(&info);
-      filler(buf, ".", &info, 0);
-
-      struct catalog::t_dirent p;
-      if (catalog::parent_unprotected(md5, p)) {
-         p.to_stat(&info);
-         filler(buf, "..", &info, 0);
-      }
-
-      vector<catalog::t_dirent> dir = catalog::ls_unprotected(md5);
-      catalog::unlock();
-      for (vector<catalog::t_dirent>::const_iterator i = dir.begin(), iEnd = dir.end();
-           i != iEnd; ++i)
-      {
-         i->to_stat(&info);
-         filler(buf, i->name.c_str(), &info, 0);
-      }
-
-      return 0;
-   }
-
-
-   /**
     * Open a file from cache.  If necessary, file is downloaded first.
     * Also catalog reload magic can happen, if file download fails.
     *
-    * \return Read-only file descriptor in fi->fh
+    * \return Read-only file descriptor or -1 on failure (sets errno)
     */
-   static int cvmfs_open(const char *c_path, struct fuse_file_info *fi)
+   int cvmfs_open(const char *c_path)
    {
       const string path = c_path;
       Tracer::trace(Tracer::FUSE_OPEN, path, "open() call");
@@ -1436,9 +1358,8 @@ namespace cvmfs {
       }
 
       if (fd >= 0) {
-         if (atomic_xadd(&open_files, 1) < ((int)nofiles)-NUM_RESERVED_FD) {
-            fi->fh = fd;
-            return 0;
+         if (atomic_xadd(&open_files, 1) < ((int)nofiles)-NUM_RESERVED_FD || nofiles==0) {
+            return fd;
          } else {
             if (close(fd) == 0) atomic_dec(&open_files);
             logmsg("open file descriptor limit exceeded");
@@ -1468,29 +1389,12 @@ namespace cvmfs {
 
 
    /**
-    * Redirected to pread into cache.
-    */
-   static int cvmfs_read(const char *path,
-                         char *buf,
-                         size_t size,
-                         off_t offset,
-                         struct fuse_file_info *fi)
-   {
-      Tracer::trace(Tracer::FUSE_READ, path, "read() call");
-
-      const int64_t fd = fi->fh;
-      return pread(fd, buf, size, offset);
-   }
-
-
-   /**
     * File close operation. Redirected into cache.
     */
-   static int cvmfs_release(const char *path __attribute__((unused)), struct fuse_file_info *fi)
+   int cvmfs_close(int fd)
    {
-      pmesg(D_CVMFS, "closeing file number %d", fi->fh);
+      pmesg(D_CVMFS, "closeing file number %d", fd);
 
-      const int64_t fd = fi->fh;
       if (close(fd) == 0) atomic_dec(&open_files);
 
       return 0;
@@ -1545,7 +1449,7 @@ namespace cvmfs {
    }
 
 
-   static int cvmfs_statfs(const char *path __attribute__((unused)), struct statvfs *info)
+   int cvmfs_statfs(const char *path __attribute__((unused)), struct statvfs *info)
    {
       /* If we return 0 it will cause the fs
          to be ignored in "df" */
@@ -1563,7 +1467,7 @@ namespace cvmfs {
       if (lru::capacity() == (uint64_t)(-1)) {
          /* Unrestricted cache, look at free space on cache dir fs */
          struct statfs cache_buf;
-         if (statfs(".", &cache_buf) == 0) {
+         if (statfs(relative_cachedir.c_str(), &cache_buf) == 0) {
             available = cache_buf.f_bavail * cache_buf.f_bsize;
             info->f_blocks = size + available;
          } else {
@@ -1597,7 +1501,7 @@ namespace cvmfs {
       return lsrc;
    }
 
-   static int cvmfs_getxattr(const char *path, const char *name, char *value, size_t vlen) {
+   int cvmfs_getxattr(const char *path, const char *name, char *value, size_t vlen) {
       const string attr = name;
       catalog::t_dirent d;
       hash::t_md5 md5(catalog::mangled_path(path));
@@ -1776,190 +1680,93 @@ namespace cvmfs {
       return -ENOATTR;
    }
 
-
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_chmod(const char *path __attribute__((unused)),
-                          mode_t mode __attribute__((unused)))
+   static void append_string_to_list(char const *str,char ***buf,size_t *listlen,size_t *buflen)
    {
-      return -EROFS;
+      if( *listlen + 1 >= *buflen ) {
+          size_t newbuflen = (*listlen)*2 + 5;
+          *buf = (char **)realloc(*buf,sizeof(char *)*newbuflen);
+          assert( *buf );
+          *buflen = newbuflen;
+          assert( *listlen < *buflen );
+      }
+      if( str ) {
+          (*buf)[(*listlen)] = strdup(str);
+          // null-terminate the list
+          (*buf)[++(*listlen)] = NULL;
+      }
+      else {
+          (*buf)[(*listlen)] = NULL;
+      }
    }
 
-
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_mkdir(const char *path __attribute__((unused)),
-                          mode_t mode __attribute__((unused)))
+   int cvmfs_listdir(const char *path,char ***buf,size_t *buflen)
    {
-      return -EROFS;
-   }
+      /* Read a directory structure, this is enough to be able to navigate through
+         a filesystem */
+      const hash::t_md5 md5 = hash::t_md5(catalog::mangled_path(path));
 
+      pmesg(D_CVMFS, "listdir %s", path);
 
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_unlink(const char *path __attribute__((unused))) {
-      return -EROFS;
-   }
+      size_t listlen = 0;
+      append_string_to_list(NULL,buf,&listlen,buflen);
 
+      struct catalog::t_dirent d;
+      catalog::lock();
+      if (lookup_cache(md5, d)) {
+         pmesg(D_CVMFS, "catalog cache HIT");
+         if (d.catalog_id < 0) {
+            catalog::unlock();
+            return -ENOENT;
+         }
+      } else {
+         if (!catalog::lookup_informed_unprotected(md5, find_catalog_id(path), d)) {
+            catalog::unlock();
+            return -ENOENT;
+         }
+      }
+      /* Maybe we have to load the nested catalog */
+      if (d.flags & catalog::DIR_NESTED) {
+         pmesg(D_CVMFS, "listing nested catalog at %s (first time access)", path);
+         hash::t_sha1 expected_clg;
+         if (!catalog::lookup_nested_unprotected(
+             d.catalog_id, catalog::mangled_path(path), expected_clg))
+         {
+            catalog::unlock();
+            logmsg("Nested catalog at %s not found (ls)", path);
+            return -ENOENT;
+         }
 
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_rmdir(const char *path __attribute__((unused))) {
-      return -EROFS;
-   }
+         int result = load_and_attach_catalog(path,
+            hash::t_md5(catalog::mangled_path(path)), path, -1, false, expected_clg);
+         if (result != 0) {
+            catalog::unlock();
+            atomic_inc(&nioerr);
+            return result;
+         }
+      }
 
+      pmesg(D_CVMFS, "Found entry %s in catalog %d, check if directory", d.name.c_str(), d.catalog_id);
+      if(!S_ISDIR(d.mode)) {
+         catalog::unlock();
+         return -ENOTDIR;
+      }
 
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_symlink(const char *from __attribute__((unused)),
-                            const char *to __attribute__((unused)))
-   {
-      return -EROFS;
-   }
+      append_string_to_list(".",buf,&listlen,buflen);
 
+      struct catalog::t_dirent p;
+      if (catalog::parent_unprotected(md5, p)) {
+         append_string_to_list("..",buf,&listlen,buflen);
+      }
 
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_rename(const char *from __attribute__((unused)),
-                           const char *to __attribute__((unused)))
-   {
-      return -EROFS;
-   }
+      vector<catalog::t_dirent> dir = catalog::ls_unprotected(md5);
+      catalog::unlock();
+      for (vector<catalog::t_dirent>::const_iterator i = dir.begin(), iEnd = dir.end();
+           i != iEnd; ++i)
+      {
+         append_string_to_list(i->name.c_str(),buf,&listlen,buflen);
+      }
 
-
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_link(const char *from __attribute__((unused)),
-                         const char *to __attribute__((unused)))
-   {
-      return -EROFS;
-   }
-
-
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_chown(const char *path __attribute__((unused)),
-                          uid_t uid __attribute__((unused)),
-                          gid_t gid __attribute__((unused)))
-   {
-      return -EROFS;
-   }
-
-
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_truncate(const char *path __attribute__((unused)),
-                             off_t size __attribute__((unused)))
-   {
-      return -EROFS;
-   }
-
-
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_utime(const char *path __attribute__((unused)),
-                          struct utimbuf *buf __attribute__((unused)))
-   {
-      return -EROFS;
-   }
-
-
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_write(const char *path __attribute__((unused)),
-                          const char *buf __attribute__((unused)),
-                          size_t size __attribute__((unused)),
-                          off_t offset __attribute__((unused)),
-                          struct fuse_file_info *fi __attribute__((unused)))
-   {
-      return -EROFS;
-   }
-
-
-   /**
-    * \return -EROFS
-    */
-   static int cvmfs_mknod(const char *path __attribute__((unused)),
-                          mode_t mode __attribute__((unused)),
-                          dev_t rdev __attribute__((unused)))
-   {
-      return -EROFS;
-   }
-
-
-   /**
-    * Do after-daemon() initialization
-    */
-   static void *cvmfs_init() {
-      int retval;
-
-      pid = getpid();
-
-      /* Switch back to cache dir after daemon() */
-      retval = chdir(cachedir.c_str());
-      assert(retval == 0);
-
-      monitor::spawn();
-
-      /* Setup Tracer */
-      if (tracefile != "") Tracer::init(8192, 7000, tracefile);
-      else Tracer::init_null();
-
-      lru::spawn();
-      talk::spawn();
-
-      max_cache_timeout = fuse_get_max_cache_timeout();
-
-      return NULL;
-   }
-
-   static void cvmfs_destroy(void *unused __attribute__((unused))) {
-      Tracer::fini();
-   }
-
-   /**
-    * Puts the callback functions in one single structure
-    */
-   static void set_cvmfs_ops(struct fuse_operations *cvmfs_operations) {
-      /* Implemented */
-      cvmfs_operations->getattr	= cvmfs_getattr;
-      cvmfs_operations->readlink	= cvmfs_readlink;
-      cvmfs_operations->readdir	= cvmfs_readdir;
-      cvmfs_operations->open	   = cvmfs_open;
-      cvmfs_operations->read	   = cvmfs_read;
-      cvmfs_operations->release 	= cvmfs_release;
-      cvmfs_operations->chmod    = cvmfs_chmod;
-      cvmfs_operations->statfs   = cvmfs_statfs;
-      cvmfs_operations->getxattr = cvmfs_getxattr;
-
-      /* Return EROFS (read-only filesystem) */
-      cvmfs_operations->mkdir    = cvmfs_mkdir;
-      cvmfs_operations->unlink   = cvmfs_unlink;
-      cvmfs_operations->rmdir    = cvmfs_rmdir;
-      cvmfs_operations->symlink	= cvmfs_symlink;
-      cvmfs_operations->rename   = cvmfs_rename;
-      cvmfs_operations->chown    = cvmfs_chown;
-      cvmfs_operations->link	   = cvmfs_link;
-      cvmfs_operations->truncate	= cvmfs_truncate;
-      cvmfs_operations->utime    = cvmfs_utime;
-      cvmfs_operations->write    = cvmfs_write;
-      cvmfs_operations->mknod    = cvmfs_mknod;
-      cvmfs_operations->chmod    = cvmfs_chmod;
-
-      /* Init/Fini */
-      cvmfs_operations->init     = cvmfs_init;
-      cvmfs_operations->destroy  = cvmfs_destroy;
+      return 0;
    }
 
 } /* namespace cvmfs */
@@ -1967,240 +1774,6 @@ namespace cvmfs {
 
 
 using namespace cvmfs;
-
-/**
- * One single structure to contain the file system options.
- * Strings(char *) must be deallocated by the user
- */
-struct cvmfs_opts {
-   unsigned timeout;
-   unsigned timeout_direct;
-   unsigned max_ttl;
-   char     *hostname;
-   char     *cachedir;
-   char     *proxies;
-   char     *tracefile;
-   char     *whitelist;
-   char     *pubkey;
-   char     *logfile;
-   char     *deep_mount;
-   char     *blacklist;
-   char     *repo_name;
-   int      force_signing;
-   int      rebuild_cachedb;
-   int      nofiles;
-   int      grab_mountpoint;
-   int      syslog_level;
-   int64_t  quota_limit;
-   int64_t  quota_threshold;
-};
-
-/* Follow the fuse convention for option parsing */
-enum {
-   KEY_HELP,
-   KEY_VERSION,
-   KEY_FOREGROUND,
-   KEY_SINGLETHREAD,
-   KEY_DEBUG,
-};
-#define CVMFS_OPT(t, p, v) { t, offsetof(struct cvmfs_opts, p), v }
-#define CVMFS_SWITCH(t, p) { t, offsetof(struct cvmfs_opts, p), 1 }
-static struct fuse_opt cvmfs_array_opts[] = {
-   CVMFS_OPT("timeout=%u",          timeout, 2),
-   CVMFS_OPT("timeout_direct=%u",   timeout_direct, 2),
-   CVMFS_OPT("max_ttl=%u",          max_ttl, 0),
-   CVMFS_OPT("cachedir=%s",         cachedir, 0),
-   CVMFS_OPT("proxies=%s",          proxies, 0),
-   CVMFS_OPT("tracefile=%s",        tracefile, 0),
-   CVMFS_SWITCH("force_signing",    force_signing),
-   CVMFS_OPT("whitelist=%s",        whitelist, 0),
-   CVMFS_OPT("pubkey=%s",           pubkey, 0),
-   CVMFS_OPT("logfile=%s",          logfile, 0),
-   CVMFS_SWITCH("rebuild_cachedb",  rebuild_cachedb),
-   CVMFS_OPT("quota_limit=%ld",     quota_limit, 0),
-   CVMFS_OPT("quota_threshold=%ld", quota_threshold, 0),
-   CVMFS_OPT("nofiles=%d",          nofiles, 0),
-   CVMFS_SWITCH("grab_mountpoint",  grab_mountpoint),
-   CVMFS_OPT("deep_mount=%s",       deep_mount, 0),
-   CVMFS_OPT("repo_name=%s",        repo_name, 0),
-   CVMFS_OPT("blacklist=%s",        blacklist, 0),
-   CVMFS_OPT("syslog_level=%d",     syslog_level, 3),
-
-   FUSE_OPT_KEY("-V",            KEY_VERSION),
-   FUSE_OPT_KEY("--version",     KEY_VERSION),
-   FUSE_OPT_KEY("-h",            KEY_HELP),
-   FUSE_OPT_KEY("--help",        KEY_HELP),
-   FUSE_OPT_KEY("-f",            KEY_FOREGROUND),
-   FUSE_OPT_KEY("-d",            KEY_DEBUG),
-   FUSE_OPT_KEY("debug",         KEY_DEBUG),
-   FUSE_OPT_KEY("-s",            KEY_SINGLETHREAD),
-   {0, 0, 0},
-};
-
-
-struct cvmfs_opts cvmfs_opts;
-struct fuse_args fuse_args;
-static struct fuse_operations cvmfs_operations;
-
-
-/**
- * Display the usage message.
- * It will be done when we requested (the flag "-h" for example),
- * but also when an unidentified option is found.
- */
-static void usage(const char *progname) {
-   fprintf(stderr,
-   "Copyright (c) 2009- CERN\n"
-   "All rights reserved\n\n"
-   "Please visit http://cernvm.cern.ch/project/info for license details and author list.\n\n");
-
-   if (progname)
-      fprintf(stderr,
-      "usage: %s <mountpath> <url>[,<url>]* [options]\n\n", progname);
-
-   fprintf(stderr,
-      "where options are:\n"
-      " -o opt,[opt...]  mount options\n\n"
-      "CernVM-FS options: \n"
-      " -o timeout=SECONDS         Timeout for network operations (default is %d)\n"
-      " -o timeout_direct=SECONDS  Timeout for network operations without proxy (default is %d)\n"
-      " -o max_ttl=MINUTES         Maximum TTL for file catalogs (default: take from catalog)\n"
-      " -o cachedir=DIR            Where to store disk cache\n"
-      " -o proxies=HTTP_PROXIES    Set the HTTP proxy list, such as 'proxy1|proxy2;DIRECT'\n"
-      " -o tracefile=FILE          Trace FUSE opaerations into FILE\n"
-      " -o whitelist=URL           HTTP location of trusted catalog certificates (defaults is /.cvmfswhitelist)\n"
-      " -o pubkey=PEMFILE          Public RSA key that is used to verify the whitelist signature.\n"
-      " -o force_signing           Except only signed catalogs\n"
-      " -o rebuild_cachedb         Force rebuilding the quota cache db from cache directory\n"
-      " -o quota_limit=MB          Limit size of data chunks in cache. -1 Means unlimited.\n"
-      " -o quota_threshold=MB      Cleanup until size is <= threshold\n"
-      " -o nofiles=NUMBER          Set the maximum number of open files for CernVM-FS process (soft limit)\n"
-      " -o grab_mountpoint         Give ownership of the mountpoint to the user before mounting (automount hack)\n"
-      " -o logfile=FILE            Logs all messages to FILE instead of stderr and daemonizes.\n"
-      "                            Makes only sense for the debug version\n"
-      " -o deep_mount=prefix       Path prefix if a repository is mounted on a nested catalog,\n"
-      "                            i.e. deep_mount=/software/15.0.1\n"
-      " -o repo_name=<repository>  Unique name of the mounted repository, e.g. atlas.cern.ch\n"
-      " -o blacklist=FILE          Local blacklist for invalid certificates.  Has precedence over the whitelist.\n"
-      "                            (Default is /etc/cvmfs/blacklist)\n"
-      " -o syslog_level=NUMBER     Sets the level used for syslog to DEBUG (1), INFO (2), or NOTICE (3).\n"
-      "                            Default is NOTICE.\n"
-      " Note: you cannot load files greater than quota_limit-quota_threshold\n",
-      2, 2
-   );
-
-   /* Print the help from FUSE */
-   const char *args[] = {progname, "-h"};
-   static struct fuse_operations op;
-   fuse_main(2, (char**)args, &op);
-}
-
-
-/**
- * Since certain fileds in cvmfs_opts are filled automatically when parsing it, \
- * we needed a procedure to free the space.
- */
-static void free_cvmfs_opts(struct cvmfs_opts *opts) {
-   if (opts->hostname)       free(opts->hostname);
-   if (opts->cachedir)       free(opts->cachedir);
-   if (opts->proxies)        free(opts->proxies);
-   if (opts->tracefile)      free(opts->tracefile);
-   if (opts->whitelist)      free(opts->whitelist);
-   if (opts->pubkey)         free(opts->pubkey);
-   if (opts->logfile)        free(opts->logfile);
-   if (opts->deep_mount)     free(opts->deep_mount);
-   if (opts->blacklist)      free(opts->blacklist);
-   if (opts->repo_name)      free(opts->repo_name);
-}
-
-
-/**
- * Checks whether the given option is one of our own options
- * (if it's not, it probably belongs to fuse).
- */
-static int is_cvmfs_opt(const char *arg) {
-   if (arg[0] != '-') {
-      unsigned arglen = strlen(arg);
-      const char **o;
-      for (o = (const char**)cvmfs_array_opts; *o; o++) {
-         unsigned olen = strlen(*o);
-         if ((arglen > olen && arg[olen] == '=') && (strncasecmp(arg, *o, olen) == 0))
-            return 1;
-      }
-   }
-   return 0;
-}
-
-
-/**
- * The callback used when fuse is parsing all the options
- * We separate CVMFS options from FUSE options here.
- *
- * \return On success zero, else non-zero
- */
-static int cvmfs_opt_proc(void *data __attribute__((unused)), const char *arg, int key,
-                          struct fuse_args *outargs)
-{
-   switch (key) {
-      case FUSE_OPT_KEY_OPT:
-         if (is_cvmfs_opt(arg)) {
-            /* If this is a "-o" option and is not one of ours, we assume that this must
-               be used when mounting fuse not when instanciating the file system...
-               It can't be one of our option if it doesnt match the template */
-            return 0;
-         }
-         if (strstr(arg, "uid=")) {
-            cvmfs::uid = atoi(arg+4);
-         }
-         if (strstr(arg, "gid=")) {
-            cvmfs::gid = atoi(arg+4);
-         }
-         return 1;
-
-      case FUSE_OPT_KEY_NONOPT:
-         if (!cvmfs_opts.hostname &&
-             ((strstr(arg, "http://") == arg) || (strstr(arg, "file://") == arg)))
-         {
-            /* If we receive a parameter that contains "http://"
-               we know for sure that it's our remote server */
-            cvmfs_opts.hostname = strdup(arg);
-         } else {
-            /* If we receive any other string, we take it as the mount point. */
-            fuse_opt_add_arg(outargs, arg);
-            cvmfs::mountpoint = arg;
-         }
-         return 0;
-
-      case KEY_HELP:
-         usage(outargs->argv[0]);
-         fuse_opt_add_arg(outargs, "-ho");
-         exit(0);
-
-      case KEY_VERSION:
-         fprintf(stderr, "CernVM-FS version %s\n", PACKAGE_VERSION);
-#if FUSE_VERSION >= 25
-         fuse_opt_add_arg(outargs, "--version");
-#endif
-         exit(0);
-
-      case KEY_FOREGROUND:
-         fuse_opt_add_arg(outargs, "-f");
-         return 0;
-
-      case KEY_SINGLETHREAD:
-         fuse_opt_add_arg(outargs, "-s");
-         return 0;
-
-      case KEY_DEBUG:
-         fuse_opt_add_arg(outargs, "-d");
-         return 0;
-
-      default:
-         fprintf(stderr, "internal error\n");
-         abort();
-   }
-}
-
 
 /* Making OpenSSL (libcrypto) thread-safe */
 pthread_mutex_t *libcrypto_locks;
@@ -2244,26 +1817,63 @@ static void libcrypto_mt_cleanup(void) {
 }
 
 
+namespace cvmfs {
+
+   static bool options_ready;
+   static bool curl_ready;
+   static bool cache_ready;
+   static bool monitor_ready;
+   static bool signature_ready;
+   static bool quota_ready;
+   static bool catalog_ready;
+   static bool talk_ready;
+
+   static void *sqlite_scratch;
+   static void *sqlite_page_cache;
+
 /**
  * Boot the beast up!
  */
-int main(int argc, char *argv[])
+int cvmfs_common_init(
+   const string &cvmfs_opts_hostname, /* url of repository */
+   const string &cvmfs_opts_proxies,
+   const string &cvmfs_opts_repo_name,
+   const string &cvmfs_opts_pubkey,
+   const string &cvmfs_opts_cachedir,
+   bool cvmfs_opts_cd_to_cachedir,
+   int64_t cvmfs_opts_quota_limit,
+   int64_t cvmfs_opts_quota_threshold,
+   bool cvmfs_opts_rebuild_cachedb,
+   int cvmfs_opts_uid,
+   int cvmfs_opts_gid,
+   unsigned cvmfs_opts_max_ttl,
+   bool cvmfs_opts_force_signing,
+   unsigned cvmfs_opts_timeout,
+   unsigned cvmfs_opts_timeout_direct,
+   int cvmfs_opts_syslog_level,
+   const string &cvmfs_opts_logfile,
+   const string &cvmfs_opts_tracefile,
+   const string &cvmfs_opts_deep_mount,
+   const string &cvmfs_opts_blacklist,
+   const string &cvmfs_opts_whitelist,
+   int cvmfs_opts_nofiles,
+   bool cvmfs_opts_grab_mountpoint,
+   bool cvmfs_opts_enable_talk,
+   void (*cvmfs_opts_set_cache_drainout_fn)(),
+   void (*cvmfs_opts_unset_cache_drainout_fn)()
+)
 {
-   int result = 1;
-   bool options_ready = false;
-   bool curl_ready = false;
-   bool cache_ready = false;
-   bool monitor_ready = false;
-   bool signature_ready = false;
-   bool quota_ready = false;
-   bool catalog_ready = false;
-   bool talk_ready = false;
    int err_catalog;
    int num_hosts;
 
-   /* Set a decent umask for new files (no write access to group/everyone).
-      We want to allow group write access for the talk-socket. */
-   umask(007);
+   options_ready = false;
+   curl_ready = false;
+   cache_ready = false;
+   monitor_ready = false;
+   signature_ready = false;
+   quota_ready = false;
+   catalog_ready = false;
+   talk_ready = false;
 
    boot_time = time(NULL);
    prev_io_error.timestamp = 0;
@@ -2272,11 +1882,12 @@ int main(int argc, char *argv[])
    libcrypto_mt_setup();
 
    /* Tune SQlite3 memory */
-   void *sqlite_scratch = smalloc(8192*16); /* 8 KB for 8 threads (2 slots per thread) */
-   void *sqlite_page_cache = smalloc(1280*3275); /* 4MB */
+   sqlite_scratch = smalloc(8192*16); /* 8 KB for 8 threads (2 slots per thread) */
+   sqlite_page_cache = smalloc(1280*3275); /* 4MB */
    assert(sqlite3_config(SQLITE_CONFIG_SCRATCH, sqlite_scratch, 8192, 16) == SQLITE_OK);
    assert(sqlite3_config(SQLITE_CONFIG_PAGECACHE, sqlite_page_cache, 1280, 3275) == SQLITE_OK);
    assert(sqlite3_config(SQLITE_CONFIG_LOOKASIDE, 32, 128) == SQLITE_OK); /* 4 KB */
+   sqlite3_initialize();
 
    /* Catalog memory cache */
    for (int i = 0; i < CATALOG_CACHE_SIZE; ++i) {
@@ -2294,62 +1905,59 @@ int main(int argc, char *argv[])
    atomic_init64(&nopen);
    atomic_init64(&ndownload);
 
-   /* Parse options */
-   fuse_args.argc = argc;
-   fuse_args.argv = argv;
-   fuse_args.allocated = 0;
-   if ((fuse_opt_parse(&fuse_args, &cvmfs_opts, cvmfs_array_opts, cvmfs_opt_proc) != 0) ||
-       !cvmfs_opts.hostname)
-   {
-      usage(argv[0]);
-      goto cvmfs_cleanup;
+   /* Fill cvmfs option variables from arguments */
+   cvmfs::cvmfs_set_cache_drainout_fn = cvmfs_opts_set_cache_drainout_fn;
+   cvmfs::cvmfs_unset_cache_drainout_fn = cvmfs_opts_unset_cache_drainout_fn;
+   cvmfs::uid = cvmfs_opts_uid ? cvmfs_opts_uid : getuid();
+   cvmfs::gid = cvmfs_opts_gid ? cvmfs_opts_gid : getgid();
+   if (cvmfs_opts_max_ttl) cvmfs::max_ttl = cvmfs_opts_max_ttl*60;
+   cvmfs::cachedir = cvmfs_opts_cachedir;
+   if (cvmfs_opts_cd_to_cachedir) {
+      cvmfs::relative_cachedir = ".";
    }
-
-
-
-   /* Fill cvmfs option variables from Fuse options */
-   if (!cvmfs::uid) cvmfs::uid = getuid();
-   if (!cvmfs::gid) cvmfs::gid = getgid();
-   if (cvmfs_opts.max_ttl) cvmfs::max_ttl = cvmfs_opts.max_ttl*60;
-   if (cvmfs_opts.cachedir) cvmfs::cachedir = cvmfs_opts.cachedir;
-   if (cvmfs_opts.proxies) cvmfs::proxies = cvmfs_opts.proxies;
-   if (cvmfs_opts.force_signing) cvmfs::force_signing = true;
-   if (cvmfs_opts.timeout == 0) cvmfs_opts.timeout = 2;
-   if (cvmfs_opts.timeout_direct == 0) cvmfs_opts.timeout_direct = 2;
-   if (cvmfs_opts.syslog_level == 0) cvmfs_opts.syslog_level = 3;
-   if (cvmfs_opts.tracefile) cvmfs::tracefile = cvmfs_opts.tracefile;
-   if (cvmfs_opts.deep_mount) cvmfs::deep_mount = canonical_path(cvmfs_opts.deep_mount);
-   if (cvmfs_opts.blacklist) cvmfs::blacklist = cvmfs_opts.blacklist;
-   if (cvmfs_opts.repo_name) cvmfs::repo_name = cvmfs_opts.repo_name;
+   else {
+      cvmfs::relative_cachedir = cvmfs::cachedir;
+   }
+   cvmfs::proxies = cvmfs_opts_proxies;
+   if (cvmfs_opts_force_signing) cvmfs::force_signing = true;
+   if (cvmfs_opts_timeout == 0) cvmfs_opts_timeout = 2;
+   if (cvmfs_opts_timeout_direct == 0) cvmfs_opts_timeout_direct = 2;
+   if (cvmfs_opts_syslog_level == 0) cvmfs_opts_syslog_level = 3;
+   cvmfs::pubkey = cvmfs_opts_pubkey;
+   cvmfs::tracefile = cvmfs_opts_tracefile;
+   if (cvmfs_opts_deep_mount.length()) cvmfs::deep_mount = canonical_path(cvmfs_opts_deep_mount);
+   else cvmfs::deep_mount = "";
+   cvmfs::blacklist = cvmfs_opts_blacklist;
+   cvmfs::repo_name = cvmfs_opts_repo_name;
    /* seperate first host from hostlist */
    unsigned iter_hostname;
-   for (iter_hostname = 0; iter_hostname < strlen(cvmfs_opts.hostname); ++iter_hostname) {
-      if (cvmfs_opts.hostname[iter_hostname] == ',') break;
+   for (iter_hostname = 0; iter_hostname < cvmfs_opts_hostname.length(); ++iter_hostname) {
+      if (cvmfs_opts_hostname[iter_hostname] == ',' || cvmfs_opts_hostname[iter_hostname] == ';') break;
    }
    if (iter_hostname == 0) cvmfs::root_url = "";
-   else cvmfs::root_url = string(cvmfs_opts.hostname, iter_hostname);
+   else cvmfs::root_url = string(cvmfs_opts_hostname, 0, iter_hostname);
 
-   if (cvmfs_opts.whitelist) cvmfs::whitelist = cvmfs_opts.whitelist;
+   if (cvmfs_opts_whitelist.length()) cvmfs::whitelist = cvmfs_opts_whitelist;
    else cvmfs::whitelist = "/.cvmfswhitelist";
    options_ready = true;
 
    /* Syslog level */
-   syslog_setlevel(cvmfs_opts.syslog_level);
+   syslog_setlevel(cvmfs_opts_syslog_level);
    if (cvmfs::repo_name != "")
       syslog_setprefix(cvmfs::repo_name.c_str());
 
    /* Maximum number of open files */
-   if (cvmfs_opts.nofiles) {
-      if (cvmfs_opts.nofiles < 0) {
+   if (cvmfs_opts_nofiles) {
+      if (cvmfs_opts_nofiles < 0) {
          cerr << "Failure: number of open files must be a positive number" << endl;
          goto cvmfs_cleanup;
       }
       struct rlimit rpl;
       memset(&rpl, 0, sizeof(rpl));
       getrlimit(RLIMIT_NOFILE, &rpl);
-      if (rpl.rlim_max < (unsigned)cvmfs_opts.nofiles)
-         rpl.rlim_max = cvmfs_opts.nofiles;
-      rpl.rlim_cur = cvmfs_opts.nofiles;
+      if (rpl.rlim_max < (unsigned)cvmfs_opts_nofiles)
+         rpl.rlim_max = cvmfs_opts_nofiles;
+      rpl.rlim_cur = cvmfs_opts_nofiles;
       if (setrlimit(RLIMIT_NOFILE, &rpl) != 0) {
          cerr << "Failed to set maximum number of open files, insufficient permissions" << endl;
          goto cvmfs_cleanup;
@@ -2357,7 +1965,7 @@ int main(int argc, char *argv[])
    }
 
    /* Grab mountpoint */
-   if (cvmfs_opts.grab_mountpoint) {
+   if (cvmfs_opts_grab_mountpoint) {
       if ((chown(cvmfs::mountpoint.c_str(), uid, gid) != 0) ||
           (chmod(cvmfs::mountpoint.c_str(), 0755) != 0))
       {
@@ -2367,8 +1975,8 @@ int main(int argc, char *argv[])
    }
 
    /* Set debug log file */
-   if (cvmfs_opts.logfile) {
-      debug_set_log(cvmfs_opts.logfile);
+   if (cvmfs_opts_logfile.length()) {
+	   debug_set_log(cvmfs_opts_logfile.c_str());
    }
 
    /* Drop rights */
@@ -2381,12 +1989,17 @@ int main(int argc, char *argv[])
    }
 
    /* CVMFS has its own proxy environment, chain of proxies */
-   num_hosts = curl_set_host_chain(cvmfs_opts.hostname);
+   num_hosts = curl_set_host_chain(cvmfs_opts_hostname.c_str());
    curl_set_proxy_chain(cvmfs::proxies.c_str());
-   curl_set_timeout(cvmfs_opts.timeout, cvmfs_opts.timeout_direct);
+   curl_set_timeout(cvmfs_opts_timeout, cvmfs_opts_timeout_direct);
+
+   if (!mkdir_deep(cvmfs::cachedir, 0700)) {
+      cerr << "Failure: cache directory " << cvmfs::cachedir << " is unavailable" << endl;
+      goto cvmfs_cleanup;
+   }
 
    /* Try to jump to cache directory.  This tests, if it is accassible.  Also, it brings speed later on. */
-   if (!mkdir_deep(cvmfs::cachedir, 0700) || (chdir(cvmfs::cachedir.c_str()) != 0)) {
+   if (cvmfs_opts_cd_to_cachedir && (chdir(cvmfs::cachedir.c_str()) != 0)) {
       cerr << "Failure: cache directory " << cvmfs::cachedir << " is unavailable" << endl;
       goto cvmfs_cleanup;
    }
@@ -2395,55 +2008,54 @@ int main(int argc, char *argv[])
 
    /* Try to init the cache... this creates a set of directories in
       cvmfs::cachedir (256 directories named 00..ff) */
-   if (!cache::init(".", cvmfs::root_url, &mutex_download)) {
+   if (!cache::init(relative_cachedir, cvmfs::root_url, &mutex_download)) {
       cerr << "Failed to setup cache in " << cvmfs::cachedir << ": " << strerror(errno) << endl;
       logmsg("failed to setup cache directory %s", cvmfs::cachedir.c_str());
       goto cvmfs_cleanup;
    }
    cache_ready = true;
 
-   /* Monitor, check for maximum number of open files */
-   if (!monitor::init(".", true)) {
-      cerr << "Failed to initialize watchdog." << endl;
-      goto cvmfs_cleanup;
+   if( cvmfs_opts_nofiles ) {
+      /* Monitor, check for maximum number of open files */
+      if (!monitor::init(relative_cachedir, true)) {
+         cerr << "Failed to initialize watchdog." << endl;
+         goto cvmfs_cleanup;
+      }
+      nofiles = monitor::get_nofiles();
+      monitor_ready = true;
    }
-   nofiles = monitor::get_nofiles();
+
    atomic_init(&cvmfs::open_files);
    atomic_init(&cvmfs::nioerr);
-   monitor_ready = true;
 
    signature::init();
-   if (!signature::load_public_keys(cvmfs_opts.pubkey ? cvmfs_opts.pubkey : "")) {
-      cout << "Failed to load public key(s)" << endl;
-      goto cvmfs_cleanup;
+   if (!signature::load_public_keys(pubkey)) {
+      cout << "Warning: cvmfs public master key could not be loaded. Cvmfs will fail on signed catalogs!" << endl;
    } else {
-      if (!cvmfs_opts.pubkey)
-         cout << "Warning: No public master key given. Cvmfs will fail on signed catalogs!" << endl;
-      else
-         cout << "CernVM-FS: using public key(s) "
-              << join_strings(split_string(cvmfs_opts.pubkey, ':'), ", ") << endl;
+      cout << "CernVM-FS: using public key "
+           << join_strings(split_string(pubkey, ':'), ", ") << endl;
    }
    signature_ready = true;
 
    /* Init quota / lru cache */
-   if (cvmfs_opts.quota_limit < 0) {
+   if (cvmfs_opts_quota_limit < 0) {
       pmesg(D_CVMFS, "unlimited cache size");
-      cvmfs_opts.quota_limit = -1;
-      cvmfs_opts.quota_threshold = 0;
+      cvmfs_opts_quota_limit = -1;
+      cvmfs_opts_quota_threshold = 0;
    } else {
-      cvmfs_opts.quota_limit *= 1024*1024;
-      cvmfs_opts.quota_threshold *= 1024*1024;
+      cvmfs_opts_quota_limit *= 1024*1024;
+      cvmfs_opts_quota_threshold *= 1024*1024;
    }
-   if (!lru::init(".", (uint64_t)cvmfs_opts.quota_limit,
-                       (uint64_t)cvmfs_opts.quota_threshold,
-                       cvmfs_opts.rebuild_cachedb))
+   if (!lru::init(relative_cachedir, (uint64_t)cvmfs_opts_quota_limit,
+                       (uint64_t)cvmfs_opts_quota_threshold,
+                       cvmfs_opts_rebuild_cachedb))
    {
       cerr << "Failed to initialize lru cache" << endl;
       goto cvmfs_cleanup;
    }
    quota_ready = true;
 
-   if (cvmfs_opts.rebuild_cachedb) {
+   if (cvmfs_opts_rebuild_cachedb) {
       cout << "CernVM-FS: rebuilding lru cache database..." << endl;
       if (!lru::build()) {
          cerr << "Failed to rebuild lru cache database" << endl;
@@ -2452,12 +2064,12 @@ int main(int argc, char *argv[])
    }
    if (lru::size() > lru::capacity()) {
       cout << "Warning: your cache is already beyond quota size, cleaning up" << endl;
-      if (!lru::cleanup(cvmfs_opts.quota_threshold)) {
+      if (!lru::cleanup(cvmfs_opts_quota_threshold)) {
          cerr << "Failed to clean up" << endl;
          goto cvmfs_cleanup;
       }
    }
-   if (cvmfs_opts.quota_limit) {
+   if (cvmfs_opts_quota_limit) {
       cout << "CernVM-FS: quota initialized, current size " << lru::size()/(1024*1024)
            << "MB" << endl;
    }
@@ -2487,39 +2099,50 @@ int main(int argc, char *argv[])
    }
    catalog_ready = true;
 
-   if (!talk::init(".")) {
-      cerr << "Failed to initialize talk socket (" << errno << ")" << endl;
-      goto cvmfs_cleanup;
+   if (cvmfs_opts_enable_talk) {
+      if (!talk::init(relative_cachedir)) {
+         cerr << "Failed to initialize talk socket (" << errno << ")" << endl;
+         goto cvmfs_cleanup;
+      }
+      talk_ready = true;
    }
-   talk_ready = true;
 
-   /* Set fuse callbacks, remove url from arguments */
-   cout << "CernVM-FS: mounted cvmfs on " << cvmfs::mountpoint << endl;
    cout << "CernVM-FS: linking to remote directory " << cvmfs::root_url << endl;
    logmsg("CernVM-FS: linking %s to remote directory %s", cvmfs::mountpoint.c_str(), cvmfs::root_url.c_str());
-   set_cvmfs_ops(&cvmfs_operations);
-   result = fuse_main(fuse_args.argc, fuse_args.argv, &cvmfs_operations);
 
-   pmesg(D_CVMFS, "Fuse loop terminated (%d)", result);
-   logmsg("CernVM-FS: unmounted %s (%s)", cvmfs::mountpoint.c_str(), cvmfs::root_url.c_str());
-
+   return 0;
 
 cvmfs_cleanup:
+   cvmfs_common_fini();
+   return 1;
+}
+
+void cvmfs_common_fini()
+{
    if (talk_ready) talk::fini();
    if (catalog_ready) catalog::fini();
    if (quota_ready) lru::fini();
    if (signature_ready) signature::fini();
    if (cache_ready) cache::fini();
    if (monitor_ready) monitor::fini();
-   if (options_ready) {
-      fuse_opt_free_args(&fuse_args);
-      free_cvmfs_opts(&cvmfs_opts);
-   }
+   Tracer::fini();
 
+   sqlite3_shutdown();
    free(sqlite_page_cache);
    free(sqlite_scratch);
+   sqlite_page_cache = NULL;
+   sqlite_scratch = NULL;
 
    libcrypto_mt_cleanup();
+}
 
-   return result;
+void cvmfs_common_spawn()
+{
+   /* Setup Tracer */
+   if (tracefile != "") Tracer::init(8192, 7000, tracefile);
+   else Tracer::init_null();
+
+   lru::spawn();
+}
+
 }

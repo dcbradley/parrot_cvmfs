@@ -9,7 +9,6 @@ install-exec-hook:
 	test -z "$(DESTDIR)/etc/cvmfs/keys" || mkdir -p "$(DESTDIR)/etc/cvmfs/keys"
 	install -c auto.cvmfs "$(DESTDIR)/etc/auto.cvmfs"
 	install -c mount.cvmfs "$(DESTDIR)/sbin/mount.cvmfs"
-	install -c umount.cvmfs "$(DESTDIR)/sbin/umount.cvmfs"
 	install -c cvmfs.initd "$(DESTDIR)/etc/init.d/cvmfs"
 	install -c -m 0644 config.sh "$(DESTDIR)/etc/cvmfs/config.sh"
 	install -c -m 0644 default.conf "$(DESTDIR)/etc/cvmfs/default.conf"

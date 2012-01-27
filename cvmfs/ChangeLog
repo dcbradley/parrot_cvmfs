@@ -1,4 +1,24 @@
+2.0.8:
+  * Fix chmod failure in cvmfs_sync.bin when catalog is created by
+    another user  
+
 2.0.7:
+  * Better detection in cvmfs_sync for malformed paths in fschanges
+  * Fixed a bug when checking the size of large files after download
+  * Fixed a bug in the error handling for creating nested catalogs
+  * Improved error messages in cvmfs_sync.cc:move_to_datastore
+  * Accept multiple public keys separated by ":".  Any of them may
+    validate a whitelist.
+  * Fixed a bug in redirfs that prevents lchown on symlinks to
+    take effect
+  * Mount helper accepts the -n option.  Not ideal as there is no
+    way to pass it to fusermount, but it works for non-existing / 
+    read-only /etc/mtab
+  * Open files in cache with O_DIRECT and O_NOATIME
+  * Fixed a presentation bug in cvmfs-talk if CVMFS_REPOSITORIES
+    is undefined and no repository is given to cvmfs-talk
+  * Removed /etc/mtab fixing, cvmfs2 has now fuse as file system
+    type (not cvmfs)
 
 2.0.6:
   * Server tools use system umask if CVMFS_SYSTEM_UMASK is yes;

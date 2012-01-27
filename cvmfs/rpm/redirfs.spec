@@ -3,7 +3,7 @@
 # Required: kernel-devel, rpmdevtools, kernel-xen-devel
 # Copy slc-kmodtool, redirfs-depmod.conf to /usr/src/redhat/SOURCES
 
-%define         svn 20101209svn671
+%define         svn 20101209svn671p1
 Name:           redirfs
 License:        GPLv3
 Summary:        Redirecting filesystem kernel module
