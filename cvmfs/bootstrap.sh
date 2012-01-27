@@ -24,6 +24,7 @@ cd kernel/redirfs
 tar xfz redirfs-${REDIRFS_VERSION}.tar.gz
 mv redirfs-${REDIRFS_VERSION}/* src/
 rm -rf redirfs-${REDIRFS_VERSION}
+patch -N -p0 < lchown.patch
 cd ../..
 
 cd jemalloc

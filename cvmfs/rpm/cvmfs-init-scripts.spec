@@ -1,6 +1,6 @@
 Summary: CernVM File System VO init scripts
 Name: cvmfs-init-scripts
-Version: 1.0.13
+Version: 1.0.15
 Release: 1
 Source0: %{name}-%{version}.tar.gz
 Group: System/Filesystems
@@ -14,7 +14,6 @@ See http://cernvm.cern.ch
 %setup -q
 %build
 %install
-install -c etc/cvmfs/config.d/alice.cern.ch.conf /etc/cvmfs/config.d/alice.cern.ch.conf
 install -c etc/cvmfs/config.d/atlas-nightlies.cern.ch.conf /etc/cvmfs/config.d/atlas-nightlies.cern.ch.conf
 install -c etc/cvmfs/config.d/grid.cern.ch.conf /etc/cvmfs/config.d/grid.cern.ch.conf
 install -c etc/cvmfs/config.d/hepsoft.cern.ch.conf /etc/cvmfs/config.d/hepsoft.cern.ch.conf
@@ -30,7 +29,6 @@ fi
 
 %files
 %defattr(-,root,root)
-/etc/cvmfs/config.d/alice.cern.ch.conf
 /etc/cvmfs/config.d/atlas-nightlies.cern.ch.conf
 /etc/cvmfs/config.d/grid.cern.ch.conf
 /etc/cvmfs/config.d/hepsoft.cern.ch.conf

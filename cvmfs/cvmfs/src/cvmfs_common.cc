@@ -6,11 +6,11 @@
  * the FUSE module and libcvmfs.  It was copied from the FUSE module
  * cvmfs.cc, removing the bits that were FUSE-specific, and making
  * a few small modifications to make it useable in libcvmfs.
- *  
+ *
  * Developed by Jakob Blomer 2009 at CERN
  * jakob.blomer@cern.ch
  */
- 
+
 #define _FILE_OFFSET_BITS 64
 #define ENOATTR ENODATA /* instead including attr/xattr.h */
 
@@ -40,8 +40,8 @@
 #include <sys/errno.h>
 #include <sys/mount.h>
 #include <stdint.h>
-#include <unistd.h> 
-#include <fcntl.h> 
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <pthread.h>
@@ -99,7 +99,7 @@ namespace cvmfs {
    time_t drainout_deadline = 0;
    hash::t_sha1 next_root;
    time_t boot_time;
-   
+
    /* Prevent DoS attacks on the Squid server */
    static struct {
       time_t timestamp;
@@ -110,7 +110,7 @@ namespace cvmfs {
    const int FORGET_DOS = 10000; // Clear DoS memory after 10 seconds
 
    pthread_mutex_t mutex_download = PTHREAD_MUTEX_INITIALIZER; ///< avoids downloading the same file twice
-   
+
    /* Caches */
    const int CATALOG_CACHE_SIZE = 32768*2;
    static inline int catalog_cache_idx(const hash::t_md5 &md5) {
@@ -127,13 +127,13 @@ namespace cvmfs {
    atomic_int cache_cleans;
    atomic_int cache_hits;
    atomic_int cache_misses;
-   
+
    atomic_int certificate_hits;
    atomic_int certificate_misses;
-   
+
    atomic_int64 nopen;
    atomic_int64 ndownload;
-   
+
    atomic_int open_files; ///< number of currently open files by Fuse calls
    unsigned nofiles; ///< maximum allowed number of open files (0 if no limit)
    const int NUM_RESERVED_FD = 512; ///< number of reserved file descriptors for internal use
@@ -157,29 +157,29 @@ namespace cvmfs {
       pthread_mutex_lock(&mutex_max_ttl);
       const uint64_t current_max = max_ttl;
       pthread_mutex_unlock(&mutex_max_ttl);
-      
+
       if (current_max == 0)
          return ttl;
-      
+
       pmesg(D_CVMFS, "building effective TTL from max (%u) and given (%u)", current_max, ttl);
       return (current_max < ttl) ? current_max : ttl;
    }
-   
+
    unsigned get_max_ttl() {
       pthread_mutex_lock(&mutex_max_ttl);
       const unsigned current_max = max_ttl/60;
       pthread_mutex_unlock(&mutex_max_ttl);
-      
+
       return current_max;
    }
-   
+
    void set_max_ttl(const unsigned value) {
       pthread_mutex_lock(&mutex_max_ttl);
       max_ttl = value*60;
       pthread_mutex_unlock(&mutex_max_ttl);
    }
-   
-   void info_loaded_catalogs(vector<string> &prefix, vector<time_t> &last_modified, 
+
+   void info_loaded_catalogs(vector<string> &prefix, vector<time_t> &last_modified,
                              vector<time_t> &expires)
    {
       catalog::lock();
@@ -194,7 +194,7 @@ namespace cvmfs {
       }
       catalog::unlock();
    }
-   
+
    /**
     * Replaces ":" and "/" with "-" to name the url of a catalog as file in the cache.
     * \return mangled url, usable as file name.
@@ -208,7 +208,7 @@ namespace cvmfs {
       return url;
    }
 
-   
+
    /**
     * Checks, if the SHA1 checksum of a PEM certificate is listed on the
     * whitelist at URL cvmfs::cert_whitelist.
@@ -221,15 +221,15 @@ namespace cvmfs {
          return false;
       }
       pmesg(D_CVMFS, "checking certificate with fingerprint %s against whitelist", fingerprint.c_str());
-      
+
       time_t local_timestamp = time(NULL);
       struct mem_url mem_url_wl;
       mem_url_wl.data = NULL;
       string buffer;
       istringstream stream;
-      string line;   
+      string line;
       unsigned skip = 0;
-      
+
       /* download whitelist */
       int curl_result;
       if (nocache) curl_result = curl_download_mem_nocache(whitelist.c_str(), &mem_url_wl, 1, 0);
@@ -237,21 +237,21 @@ namespace cvmfs {
       if ((curl_result != CURLE_OK) || !mem_url_wl.data) {
          pmesg(D_CVMFS, "whitelist could not be loaded from %s", whitelist.c_str());
          return false;
-      } 
+      }
       buffer = string(mem_url_wl.data, mem_url_wl.size);
-      
+
       /* parse whitelist */
       stream.str(buffer);
-      
+
       /* check timestamp (UTC) */
       if (!getline(stream, line) || (line.length() != 14)) {
          pmesg(D_CVMFS, "invalid timestamp format");
          free(mem_url_wl.data);
          return false;
       }
-      skip += 15; 
+      skip += 15;
       /* Ignore issue date (legacy) */
-      
+
       /* Now expiry date */
       if (!getline(stream, line) || (line.length() != 15)) {
          pmesg(D_CVMFS, "invalid timestamp format");
@@ -280,7 +280,7 @@ namespace cvmfs {
          free(mem_url_wl.data);
          return false;
       }
-      
+
       /* Check repository name */
       if (!getline(stream, line)) {
          pmesg(D_CVMFS, "failed to get repository name");
@@ -289,12 +289,12 @@ namespace cvmfs {
       }
       skip += line.length() + 1;
       if ((repo_name != "") && ("N" + repo_name != line)) {
-         pmesg(D_CVMFS, "repository name does not match (found %s, expected %s)", 
+         pmesg(D_CVMFS, "repository name does not match (found %s, expected %s)",
                         line.c_str(), repo_name.c_str());
          free(mem_url_wl.data);
          return false;
       }
-      
+
       /* search the fingerprint */
       bool found = false;
       while (getline(stream, line)) {
@@ -309,7 +309,7 @@ namespace cvmfs {
             free(mem_url_wl.data);
          return false;
       }
-      
+
       /* check whitelist signature */
       if (!getline(stream, line) || (line.length() < 40)) {
          pmesg(D_CVMFS, "no checksum at the end of whitelist found");
@@ -323,7 +323,7 @@ namespace cvmfs {
          free(mem_url_wl.data);
          return false;
       }
-         
+
       /* check local blacklist */
       ifstream fblacklist;
       fblacklist.open(blacklist.c_str());
@@ -340,10 +340,10 @@ namespace cvmfs {
          }
          fblacklist.close();
       }
-         
+
       void *sig_buf;
       unsigned sig_buf_size;
-      if (!read_sig_tail(&buffer[0], buffer.length(), skip, 
+      if (!read_sig_tail(&buffer[0], buffer.length(), skip,
                          &sig_buf, &sig_buf_size))
       {
          pmesg(D_CVMFS, "no signature at the end of whitelist found");
@@ -351,11 +351,11 @@ namespace cvmfs {
          return false;
       }
       const string sha1str = sha1.to_string();
-      bool result = signature::verify_rsa(&sha1str[0], 40, sig_buf, sig_buf_size); 
+      bool result = signature::verify_rsa(&sha1str[0], 40, sig_buf, sig_buf_size);
       free(sig_buf);
       if (!result) pmesg(D_CVMFS, "whitelist signature verification failed, %s", signature::get_crypto_err().c_str());
       else pmesg(D_CVMFS, "whitelist signature verification passed");
-         
+
       if (result) {
          return true;
       } else {
@@ -363,8 +363,8 @@ namespace cvmfs {
          return false;
       }
    }
-   
-   
+
+
    /**
     * Loads a catalog from an url into local cache if there is a newer version.
     * Catalogs are stored like data chunks.
@@ -373,7 +373,7 @@ namespace cvmfs {
     * We first download the checksum of the catalog to quickly see if anyting changed.
     *
     * The checksum can be signed by an X.509 certificate.  If so, we only load succeed
-    * only with a valid signature and a valid certificate. 
+    * only with a valid signature and a valid certificate.
     *
     * @param[in] url, relative directory path starting from root_url
     * @param[in] no_proxy, if true, fetch checksum and signature/whitelist with pragma: no-cache
@@ -386,7 +386,7 @@ namespace cvmfs {
     * \return 0 on success, a standard error code else
     */
    static int fetch_catalog(const string &url_path, const bool no_proxy, const hash::t_md5 &mount_point,
-                            string &cat_file, hash::t_sha1 &cat_sha1, string &old_file, hash::t_sha1 &old_sha1, 
+                            string &cat_file, hash::t_sha1 &cat_sha1, string &old_file, hash::t_sha1 &old_sha1,
                             bool &cached_copy, const hash::t_sha1 &sha1_expected, const bool dry_run = false)
    {
       const string fskey = (repo_name == "") ? cvmfs::root_url : repo_name;
@@ -403,23 +403,23 @@ namespace cvmfs {
       int curl_result;
       int64_t local_modified;
       char *checksum = NULL;
-      
+
       pmesg(D_CVMFS, "searching for filesystem at %s", (cvmfs::root_url+url_path).c_str());
-      
+
       cached_copy = false;
       cat_file = old_file = "";
       old_sha1 = cat_sha1 = hash::t_sha1();
       local_modified = 0;
-      
+
       /* load local checksum */
-      pmesg(D_CVMFS, "local checksum file is %s", lpath_chksum.c_str());   
+      pmesg(D_CVMFS, "local checksum file is %s", lpath_chksum.c_str());
       FILE *fchksum = fopen(lpath_chksum.c_str(), "r");
       char tmp[40];
-      if (fchksum && (fread(tmp, 1, 40, fchksum) == 40)) 
+      if (fchksum && (fread(tmp, 1, 40, fchksum) == 40))
       {
          sha1_local.from_hash_str(string(tmp, 40));
          cat_file = relative_cachedir + "/" + string(tmp, 2) + "/" + string(tmp+2, 38);
-         
+
          /* try to get local last modified time */
          char buf_modified;
          string str_modified;
@@ -428,11 +428,11 @@ namespace cvmfs {
                str_modified += string(&buf_modified, 1);
             local_modified = atoll(str_modified.c_str());
             pmesg(D_CVMFS, "cached copy publish date %s", localtime_ascii(local_modified, true).c_str());
-         } 
+         }
 
          /* Sanity check, do we have the catalog? If yes, save it to temporary file. */
          if (!dry_run) {
-            if (rename(cat_file.c_str(), (cat_file + "T").c_str()) != 0) { 
+            if (rename(cat_file.c_str(), (cat_file + "T").c_str()) != 0) {
                cat_file = "";
                unlink(lpath_chksum.c_str());
                pmesg(D_CVMFS, "checksum existed but no catalog with it");
@@ -452,14 +452,14 @@ namespace cvmfs {
          pmesg(D_CVMFS, "unable to read local checksum");
       }
       if (fchksum) fclose(fchksum);
-      
+
       /* load remote checksum */
       int sig_start = 0;
-      if (sha1_expected == hash::t_sha1()) { 
+      if (sha1_expected == hash::t_sha1()) {
          if (no_proxy) curl_result = curl_download_mem_nocache(rpath_chksum.c_str(), &mem_url_chksum, 1, 0);
          else curl_result = curl_download_mem(rpath_chksum.c_str(), &mem_url_chksum, 1, 0);
          if (curl_result != CURLE_OK) {
-            if (mem_url_chksum.size > 0) free(mem_url_chksum.data); 
+            if (mem_url_chksum.size > 0) free(mem_url_chksum.data);
             pmesg(D_CVMFS, "unable to load checksum from %s (%d), going to offline mode", rpath_chksum.c_str(), curl_result);
             logmsg("unable to load checksum from %s (%d), going to offline mode", rpath_chksum.c_str(), curl_result);
             return -EIO;
@@ -467,7 +467,7 @@ namespace cvmfs {
          checksum = (char *)alloca(mem_url_chksum.size);
          memcpy(checksum, mem_url_chksum.data, mem_url_chksum.size);
          free(mem_url_chksum.data);
-      
+
          /* parse remote checksum */
          parse_keyval(checksum, mem_url_chksum.size, sig_start, sha1_chksum, chksum_keyval);
 
@@ -481,12 +481,12 @@ namespace cvmfs {
       } else {
          sha1_download = sha1_expected;
       }
-      
+
       /* short way out, use cached copy */
       if (have_cached) {
          if (sha1_download == sha1_local)
             return 0;
-         
+
          /* Sanity check, last modified (if available, i.e. if signed) */
          map<char, string>::const_iterator published = chksum_keyval.find('T');
          if (published != chksum_keyval.end()) {
@@ -497,7 +497,7 @@ namespace cvmfs {
             }
          }
       }
-         
+
       if (sha1_expected == hash::t_sha1()) {
          /* Sanity check: repository name */
          if (repo_name != "") {
@@ -512,8 +512,8 @@ namespace cvmfs {
                return -EINVAL;
             }
          }
-      
-      
+
+
          /* Sanity check: root prefix */
          map<char, string>::const_iterator root_prefix = chksum_keyval.find('R');
          if (root_prefix == chksum_keyval.end()) {
@@ -525,30 +525,30 @@ namespace cvmfs {
             logmsg("Expected mount point does not match in %s", rpath_chksum.c_str());
             return -EINVAL;
          }
-      
+
          /* verify remote checksum signature, failure is handled like checksum could not be downloaded,
             except for error code -2 instead of -1. */
          void *sig_buf_heap;
          unsigned sig_buf_size;
          if ((sig_start > 0) &&
-             read_sig_tail(checksum, mem_url_chksum.size, sig_start, 
-                           &sig_buf_heap, &sig_buf_size)) 
+             read_sig_tail(checksum, mem_url_chksum.size, sig_start,
+                           &sig_buf_heap, &sig_buf_size))
          {
             void *sig_buf = alloca(sig_buf_size);
             memcpy(sig_buf, sig_buf_heap, sig_buf_size);
             free(sig_buf_heap);
-         
+
             /* retrieve certificate */
             map<char, string>::const_iterator key_cert = chksum_keyval.find('X');
             if ((key_cert == chksum_keyval.end()) || (key_cert->second.length() < 40)) {
                pmesg(D_CVMFS, "invalid certificate in checksum");
                return -EINVAL;
             }
-         
+
             bool cached_cert = false;
             hash::t_sha1 cert_sha1;
             cert_sha1.from_hash_str(key_cert->second.substr(0, 40));
-         
+
             if (cache::disk_to_mem(cert_sha1, &mem_url_cert.data, &mem_url_cert.size)) {
                atomic_inc(&certificate_hits);
                cached_cert = true;
@@ -556,16 +556,16 @@ namespace cvmfs {
                atomic_inc(&certificate_misses);
                cached_cert = false;
 
-               const string url_cert = "/data/" + key_cert->second.substr(0, 2) + "/" + 
+               const string url_cert = "/data/" + key_cert->second.substr(0, 2) + "/" +
                                        key_cert->second.substr(2) + "X";
                if (no_proxy) curl_result = curl_download_mem_nocache(url_cert.c_str(), &mem_url_cert, 1, 1);
                else curl_result = curl_download_mem(url_cert.c_str(), &mem_url_cert, 1, 1);
                if (curl_result != CURLE_OK) {
                   pmesg(D_CVMFS, "unable to load certificate from %s (%d)", url_cert.c_str(), curl_result);
-                  if (mem_url_cert.size > 0) free(mem_url_cert.data); 
+                  if (mem_url_cert.size > 0) free(mem_url_cert.data);
                   return -EAGAIN;
                }
-            
+
                /* verify downloaded chunk */
                void *outbuf;
                size_t outsize;
@@ -584,17 +584,17 @@ namespace cvmfs {
                   return -EAGAIN;
                }
             }
-         
+
             /* read certificate */
             if (!signature::load_certificate(mem_url_cert.data, mem_url_cert.size, false)) {
                pmesg(D_CVMFS, "could not read certificate");
                free(mem_url_cert.data);
                return -EINVAL;
             }
-               
+
             /* verify certificate and signature */
             if (!valid_certificate(no_proxy) ||
-                !signature::verify(&((sha1_chksum.to_string())[0]), 40, sig_buf, sig_buf_size)) 
+                !signature::verify(&((sha1_chksum.to_string())[0]), 40, sig_buf, sig_buf_size))
             {
                pmesg(D_CVMFS, "signature verification failed against %s", sha1_chksum.to_string().c_str());
                free(mem_url_cert.data);
@@ -602,9 +602,9 @@ namespace cvmfs {
             }
             pmesg(D_CVMFS, "catalog signed by: %s", signature::whois().c_str());
             signature_ok = true;
-         
+
             if (!cached_cert) {
-               cache::mem_to_disk(cert_sha1, mem_url_cert.data, mem_url_cert.size, 
+               cache::mem_to_disk(cert_sha1, mem_url_cert.data, mem_url_cert.size,
                                   "certificate of " + signature::whois());
             }
             free(mem_url_cert.data);
@@ -616,12 +616,12 @@ namespace cvmfs {
             }
          }
       }
-      
+
       if (dry_run) {
          cat_sha1 = sha1_download;
          return 1;
       }
-      
+
       /* load new catalog */
       const string tmp_file_template = relative_cachedir + "/cvmfs.catalog.XXXXXX";
       char *tmp_file = strdupa(tmp_file_template.c_str());
@@ -637,7 +637,7 @@ namespace cvmfs {
       char strmbuf[4096];
       retval = setvbuf(tmp_fp, strmbuf, _IOFBF, 4096);
       assert(retval == 0);
-      
+
       const string sha1_clg_str = sha1_download.to_string();
       const string url_clg = "/data/" + sha1_clg_str.substr(0, 2) + "/" +
                              sha1_clg_str.substr(2) + "C";
@@ -650,7 +650,7 @@ namespace cvmfs {
          unlink(tmp_file);
          return -EAGAIN;
       }
-      
+
       /* we have all bits and pieces, write checksum and catalog into cache directory */
       const string sha1_download_str = sha1_download.to_string();
       cat_file = tmp_file;
@@ -663,7 +663,7 @@ namespace cvmfs {
          map<char, string>::const_iterator published = chksum_keyval.find('T');
          if (published != chksum_keyval.end())
             local_chksum += "T" + published->second;
-            
+
          fchksum = fdopen(fdchksum, "w");
          if (fchksum) {
             if (fwrite(&(local_chksum[0]), 1, local_chksum.length(), fchksum) != local_chksum.length())
@@ -676,23 +676,23 @@ namespace cvmfs {
          unlink(lpath_chksum.c_str());
       }
       if ((sha1_expected == hash::t_sha1()) && signature_ok) {
-         logmsg("Signed catalog loaded from %s, signed by %s", 
+         logmsg("Signed catalog loaded from %s, signed by %s",
                 (cvmfs::root_url + url_path).c_str(), signature::whois().c_str());
       }
       return 0;
    }
-   
-   
+
+
    static void update_ttl(catalog_tree::catalog_meta_t *info) {
       info->expires = time(NULL) + effective_ttl(catalog::get_ttl(info->catalog_id));
    }
-   
+
    static void update_ttl_shortterm(catalog_tree::catalog_meta_t *info) {
       info->expires = time(NULL) + effective_ttl(short_term_ttl);
    }
-   
+
    /**
-    * Carefully invalidate memory cache 
+    * Carefully invalidate memory cache
     */
    static void invalidate_cache(const int catalog_id) {
       hash::t_md5 md5_null;
@@ -706,17 +706,17 @@ namespace cvmfs {
          }
       }
    }
-   
+
    static void set_dirty(catalog_tree::catalog_meta_t *info) {
       const int catalog_id = info->catalog_id;
       const int parent_id = catalog_tree::get_parent(catalog_id)->catalog_id;
-      
+
       if (catalog_tree::get_catalog(parent_id)->dirty) {
          info->dirty = true;
       } else {
          hash::t_sha1 expected_clg;
-         if (!catalog::lookup_nested_unprotected(parent_id, 
-                                                 catalog::mangled_path(info->path), 
+         if (!catalog::lookup_nested_unprotected(parent_id,
+                                                 catalog::mangled_path(info->path),
                                                  expected_clg))
          {
             logmsg("Nested catalog at %s not found (forward scan)", (info->path).c_str());
@@ -732,8 +732,8 @@ namespace cvmfs {
          }
       }
    }
-   
-   
+
+
    /* returns: 0 -- cached, 1 -- new, negative -- error */
    static int check_catalog(const string &url_path, const hash::t_md5 &mount_point,
                             const string &mount_path, hash::t_sha1 &new_catalog)
@@ -743,20 +743,20 @@ namespace cvmfs {
       hash::t_sha1 sha1_old;
       bool cached_copy;
 
-      int result = fetch_catalog(url_path, false, mount_point, 
+      int result = fetch_catalog(url_path, false, mount_point,
                                  cat_file, new_catalog, old_file, sha1_old, cached_copy, hash::t_sha1(), true);
       if ((result == -EPERM) || (result == -EAGAIN) || (result == -EINVAL)) {
          /* retry with no-cache pragma */
          pmesg(D_CVMFS, "could not load catalog, trying again with pragma: no-cache");
          logmsg("possible data corruption while trying to retrieve catalog from %s, trying with no-cache",
                 (cvmfs::root_url + url_path).c_str());
-         result = fetch_catalog(url_path, true, mount_point, 
+         result = fetch_catalog(url_path, true, mount_point,
                                 cat_file, new_catalog, old_file, sha1_old, cached_copy, hash::t_sha1(), true);
       }
-      
+
       /* log certain failures */
       if (result == -EPERM) {
-         logmsg("signature verification failure while trying to retrieve catalog from %s", 
+         logmsg("signature verification failure while trying to retrieve catalog from %s",
                 (cvmfs::root_url + url_path).c_str());
       }
       if ((result == -EINVAL) || (result == -EAGAIN)) {
@@ -764,22 +764,22 @@ namespace cvmfs {
                 (cvmfs::root_url + url_path).c_str());
       }
       else if (result < 0) {
-         logmsg("catalog load failure while try to retrieve catalog from %s", 
+         logmsg("catalog load failure while try to retrieve catalog from %s",
                 (cvmfs::root_url + url_path).c_str());
       }
-      
+
       return result;
    }
-   
+
    /**
     * Uses fetch catalog to get a possibly new catalog version.
     * Old catalog has to be detached afterwards.
     * Updates LRU database and TTL list.
     * \return 0 on success (also cached copy is success), standard error code else
     */
-   static int load_and_attach_catalog(const string &url_path, const hash::t_md5 &mount_point, 
+   static int load_and_attach_catalog(const string &url_path, const hash::t_md5 &mount_point,
                                       const string &mount_path, const int existing_cat_id, const bool no_cache,
-                                      const hash::t_sha1 expected_clg = hash::t_sha1()) 
+                                      const hash::t_sha1 expected_clg = hash::t_sha1())
    {
       string cat_file;
       string old_file;
@@ -787,20 +787,20 @@ namespace cvmfs {
       hash::t_sha1 sha1_cat;
       bool cached_copy;
       int cat_id = existing_cat_id;
-      
-      int result = fetch_catalog(url_path, no_cache, mount_point, 
+
+      int result = fetch_catalog(url_path, no_cache, mount_point,
                                  cat_file, sha1_cat, old_file, sha1_old, cached_copy, expected_clg);
       if (((result == -EPERM) || (result == -EAGAIN) || (result == -EINVAL)) && !no_cache) {
          /* retry with no-cache pragma */
          pmesg(D_CVMFS, "could not load catalog, trying again with pragma: no-cache");
          logmsg("possible data corruption while trying to retrieve catalog from %s, trying with no-cache",
                 (cvmfs::root_url + url_path).c_str());
-         result = fetch_catalog(url_path, true, mount_point, 
+         result = fetch_catalog(url_path, true, mount_point,
                                 cat_file, sha1_cat, old_file, sha1_old, cached_copy, expected_clg);
       }
       /* log certain failures */
       if (result == -EPERM) {
-         logmsg("signature verification failure while trying to retrieve catalog from %s", 
+         logmsg("signature verification failure while trying to retrieve catalog from %s",
                 (cvmfs::root_url + url_path).c_str());
       }
       if ((result == -EINVAL) || (result == -EAGAIN)) {
@@ -808,10 +808,10 @@ namespace cvmfs {
                 (cvmfs::root_url + url_path).c_str());
       }
       else if (result < 0) {
-         logmsg("catalog load failure while try to retrieve catalog from %s", 
+         logmsg("catalog load failure while try to retrieve catalog from %s",
                 (cvmfs::root_url + url_path).c_str());
       }
-      
+
       /* LRU handling, could still fail due to cache size restrictions */
       if (((result == 0) && !cached_copy) ||
           ((existing_cat_id < 0) && ((result == 0) || cached_copy)))
@@ -843,13 +843,13 @@ namespace cvmfs {
             }
          }
       }
-      
+
       time_t now = time(NULL);
-      
+
       /* Now we have the right catalog in cat_file, which might be
             already loaded (cache_copy and existing_cat_id > 0) */
       if (((result == 0) && !cached_copy) ||
-          ((existing_cat_id < 0) && ((result == 0) || cached_copy))) 
+          ((existing_cat_id < 0) && ((result == 0) || cached_copy)))
       {
          bool attach_result;
          if (existing_cat_id >= 0) {
@@ -860,20 +860,20 @@ namespace cvmfs {
          } else {
             attach_result = catalog::attach(cat_file, url_path, true, false);
             /* Insert new catalog into the tree */
-            catalog_tree::catalog_meta_t *info = 
-               new catalog_tree::catalog_meta_t(canonical_path(mount_path), 
+            catalog_tree::catalog_meta_t *info =
+               new catalog_tree::catalog_meta_t(canonical_path(mount_path),
                                                 catalog::get_num_catalogs()-1, sha1_cat);
             if (cached_copy)
                info->last_changed = 0;
-            else 
+            else
                info->last_changed = now;
 
             catalog_tree::insert(info);
          }
-         
+
          /* Also for existing_cat_id < 0 to remove the "nested" flags from cache */
          invalidate_cache(existing_cat_id);
-            
+
          if (!attach_result) {
             /* should never happen, no reasonable continuation */
             pmesg(D_CVMFS, "failed to attach new catalog");
@@ -885,19 +885,19 @@ namespace cvmfs {
             }
          }
       }
-      
+
       /* Back-rename if we have a catalog at all.  No race condition with LRU
          because file is pinned. */
       if ((result == 0) || cached_copy) {
          const string sha1_cat_str = sha1_cat.to_string();
-         const string final_file = relative_cachedir + "/" + sha1_cat_str.substr(0, 2) + "/" + 
+         const string final_file = relative_cachedir + "/" + sha1_cat_str.substr(0, 2) + "/" +
                                    sha1_cat_str.substr(2);
          (void)rename(cat_file.c_str(), final_file.c_str());
       }
-      
+
       if (cat_id >= 0) {
          catalog_tree::catalog_meta_t *info = catalog_tree::get_catalog(cat_id);
-         
+
          info->last_checked = now;
          /* Forward TTL adjustment, only on success */
          if (result == 0) {
@@ -919,9 +919,9 @@ namespace cvmfs {
          return result;
       }
    }
-   
-   
-   
+
+
+
    /**
     * Tries to find a directory entry in local direct mapped cache.
     * Same interface as catalog::lookup_unprotected
@@ -931,11 +931,11 @@ namespace cvmfs {
    static int resolve_cache_idx_find(const hash::t_md5 &md5, bool &found) {
       const int idx = catalog_cache_idx(md5);
       const int bucket_start = idx - idx%2;
-      
+
       found = true;
       if (catalog_cache[bucket_start].md5 == md5)
          return bucket_start;
-      
+
       if (!(catalog_cache[bucket_start+1].md5 == md5)) {
          found = false;
       } else {
@@ -943,29 +943,29 @@ namespace cvmfs {
          catalog_cache[bucket_start] = catalog_cache[bucket_start+1];
          catalog_cache[bucket_start+1] = tmp;
       }
-      
+
       return bucket_start;
    }
-   
+
    static int resolve_cache_idx_insert(const hash::t_md5 &md5) {
       const int idx = catalog_cache_idx(md5);
       const int bucket_start = idx - idx%2;
       const hash::t_md5 null_md5;
-      
-      if (!(catalog_cache[bucket_start].md5 == md5) && 
+
+      if (!(catalog_cache[bucket_start].md5 == md5) &&
           !(catalog_cache[bucket_start].md5 == null_md5))
       {
-         /*if (!(catalog_cache[bucket_start+1].md5 == md5) && 
+         /*if (!(catalog_cache[bucket_start+1].md5 == md5) &&
              !(catalog_cache[bucket_start].md5 == null_md5))
          {
             atomic_inc(&cache_replaces);
          } */
          catalog_cache[bucket_start+1] = catalog_cache[bucket_start];
       }
-      
+
       return bucket_start;
    }
-   
+
    static bool lookup_cache(const hash::t_md5 &md5, catalog::t_dirent &d) {
       bool found;
       const int idx = resolve_cache_idx_find(md5, found);
@@ -975,12 +975,12 @@ namespace cvmfs {
          atomic_inc(&cache_hits);
          return true;
       }
-      
+
       atomic_inc(&cache_misses);
       return false;
    }
-   
-   
+
+
    /**
     * Inserts or replaces md5 in local d-cache.
     */
@@ -992,8 +992,8 @@ namespace cvmfs {
       catalog_cache[idx].d = d;
       atomic_inc(&cache_inserts);
    }
-   
-   
+
+
    /**
     * Inserts a negative entry for md5 in local d-cache.
     */
@@ -1005,8 +1005,8 @@ namespace cvmfs {
       catalog_cache[idx].d.catalog_id = -1;
       atomic_inc(&cache_inserts);
    }
-   
-   
+
+
    /**
     * Don't call without catalog::lock()
     */
@@ -1019,10 +1019,10 @@ namespace cvmfs {
       }
       return result;
    }
-   
+
    void catalog_cache_memusage_slots(int &positive, int &negative, int &all,
                                      int &inserts, int &replaces, int &cleans, int &hits, int &misses,
-                                     int &cert_hits, int &cert_misses) 
+                                     int &cert_hits, int &cert_misses)
    {
       positive = negative = 0;
       all = CATALOG_CACHE_SIZE;
@@ -1040,7 +1040,7 @@ namespace cvmfs {
       cleans = atomic_read(&cache_cleans);
       hits = atomic_read(&cache_hits);
       misses = atomic_read(&cache_misses);
-      
+
       cert_hits = atomic_read(&certificate_hits);
       cert_misses = atomic_read(&certificate_misses);
    }
@@ -1048,52 +1048,52 @@ namespace cvmfs {
    static int find_catalog_id(const string &path) {
       return catalog_tree::get_hosting((path == "") ? "/" : path)->catalog_id;
    }
-   
-   
+
+
    static int refresh_catalog(const int catalog_id) {
       catalog_tree::catalog_meta_t *catalog = catalog_tree::get_catalog(catalog_id);
-         
+
       if (catalog->dirty) {
          pmesg(D_CVMFS, "refreshing catalog id %d", catalog_id);
          int parent_id = catalog_tree::get_parent(catalog_id)->catalog_id;
-         
+
          /* Refresh parent catalog */
          int result = refresh_catalog(parent_id);
          if (result != 0) {
             logmsg("Nested catalog at %s not refreshed because of parent", (catalog->path).c_str());
             return result;
          }
-         
+
          /* Get the new checksum from parent catalog */
          hash::t_sha1 expected_clg;
-         if (!catalog::lookup_nested_unprotected(parent_id, 
-                                                 catalog::mangled_path(catalog->path), 
+         if (!catalog::lookup_nested_unprotected(parent_id,
+                                                 catalog::mangled_path(catalog->path),
                                                  expected_clg))
          {
             logmsg("Nested catalog at %s not found (refresh)", (catalog->path).c_str());
             return -ENOENT;
          }
-         
+
          result = load_and_attach_catalog(catalog::get_catalog_url(catalog_id),
                                           hash::t_md5(catalog::get_root_prefix_specific(catalog_id)),
                                           catalog->path, catalog_id, false, expected_clg);
          return result;
       }
-      
+
       return 0;
    }
-   
-   
+
+
    /* negative -- error, 0 -- cached, 1 -- switched to drainout, 2 -- already in drainout */
    int remount() {
       catalog::lock();
       pmesg(D_CVMFS, "Forced catalog reload...");
-      
+
       if (drainout_deadline) {
          catalog::unlock();
          return 2;
       }
-      
+
       /* Reload root catalog */
       hash::t_sha1 new_catalog;
       int result = check_catalog(catalog::get_catalog_url(0),
@@ -1105,13 +1105,13 @@ namespace cvmfs {
          drainout_deadline = time(NULL) + max_cache_timeout;
          next_root = new_catalog;
       }
-      
+
       catalog::unlock();
       return result;
    }
-   
-   
-   
+
+
+
    /**
     * Gets called as kind of prerequisit to every operation.
     * We do two kinds of magic here: check catalog TTL (and reload, if necessary)
@@ -1128,7 +1128,7 @@ namespace cvmfs {
       Tracer::trace(Tracer::FUSE_STAT, path, "stat() call");
       const hash::t_md5 md5(catalog::mangled_path(path));
       struct catalog::t_dirent d;
-      
+
       catalog::lock();
       int catalog_id = find_catalog_id(path);
       time_t now = time(NULL);
@@ -1137,55 +1137,55 @@ namespace cvmfs {
       if (drainout_deadline && (now > drainout_deadline)) {
          /* Reload root catalog */
          pmesg(D_CVMFS, "Catalog %d: TTL expired, kernel cache drainout complete, reloading...", catalog_id);
-         
+
          /* Don't load very old stuff */
          if (now > drainout_deadline + max_cache_timeout)
             next_root = hash::t_sha1();
-         
+
          int result = load_and_attach_catalog(catalog::get_catalog_url(0),
                                               hash::t_md5(catalog::get_root_prefix_specific(0)),
                                               catalog_tree::get_catalog(0)->path, 0, false, next_root);
          cvmfs_unset_cache_drainout();
          drainout_deadline = 0;
-         
+
          if (result != 0) {
             catalog::unlock();
             atomic_inc(&nioerr);
             return result;
          }
-         
+
          logmsg("switched to catalog revision %d", catalog::get_revision());
       }
-      
+
       /* Check catalog TTL, goto drainout mode if necessary */
-      pmesg(D_CVMFS, "current time %lu, deadline %lu", time(NULL), catalog_tree::get_catalog(catalog_id)->expires);      
+      pmesg(D_CVMFS, "current time %lu, deadline %lu", time(NULL), catalog_tree::get_catalog(catalog_id)->expires);
       if ((!drainout_deadline) && (now > catalog_tree::get_catalog(catalog_id)->expires)) {
          /* Reload root catalog */
          pmesg(D_CVMFS, "Catalog %d: TTL expired, draining out caches...", catalog_id);
-         
+
          hash::t_sha1 new_catalog;
          catalog_tree::catalog_meta_t *clginfo = catalog_tree::get_catalog(0);
          int result = check_catalog(catalog::get_catalog_url(0),
                                     hash::t_md5(catalog::get_root_prefix_specific(0)),
                                     clginfo->path, new_catalog);
-         
+
          if (result < 0) {
             clginfo->expires = time(NULL) + effective_ttl(short_term_ttl);
             catalog_tree::visit_children(0, update_ttl_shortterm);
          }
-         
+
          if (result == 0) {
             clginfo->expires = now + effective_ttl(catalog::get_ttl(0));
             catalog_tree::visit_children(0, update_ttl);
          }
-         
+
          if (result == 1) {
             cvmfs_set_cache_drainout();
             drainout_deadline = time(NULL) + max_cache_timeout;
             next_root = new_catalog;
          }
       }
-      
+
       /* Hopefully in mem-cache */
       if (lookup_cache(md5, d)) {
          pmesg(D_CVMFS, "catalog cache HIT (getattr)");
@@ -1200,8 +1200,8 @@ namespace cvmfs {
          /* Otherwise, look in the catalog */
          pmesg(D_CVMFS, "catalog cache MISS (getattr)");
          int catalog_id = find_catalog_id(path);
-         
-         /* Check if this catalog is dirty, reload if necessary 
+
+         /* Check if this catalog is dirty, reload if necessary
             Can only happen for nested catalogs. */
          int result = refresh_catalog(catalog_id);
          if (result != 0) {
@@ -1209,17 +1209,17 @@ namespace cvmfs {
             atomic_inc(&nioerr);
             return result;
          }
-         
+
          /* Now lookup */
          if (!catalog::lookup_informed_unprotected(md5, catalog_id, d)) {
             pmesg(D_CVMFS, "getattr: file %s not existant, maybe we are in a nested catalog?", c_path);
-            
+
             /* Look for nested catalog in a parent path */
             const string p_path = get_parent_path(path);
             const hash::t_md5 p_md5(catalog::mangled_path(p_path));
             catalog::t_dirent p;
-            if ((lookup_cache(p_md5, p) || catalog::lookup_informed_unprotected(p_md5, find_catalog_id(p_path), p)) && 
-                (p.flags & catalog::DIR_NESTED) && (p_path != "")) 
+            if ((lookup_cache(p_md5, p) || catalog::lookup_informed_unprotected(p_md5, find_catalog_id(p_path), p)) &&
+                (p.flags & catalog::DIR_NESTED) && (p_path != ""))
             {
                /* Load nested catalog */
                pmesg(D_CVMFS, "first time access to nested path %s, loading catalog at %s", c_path, p_path.c_str());
@@ -1231,15 +1231,15 @@ namespace cvmfs {
                   logmsg("Nested catalog at %s not found (getattr)", c_path);
                   return -ENOENT;
                }
-               
-               int result = load_and_attach_catalog(p_path, 
+
+               int result = load_and_attach_catalog(p_path,
                   hash::t_md5(catalog::mangled_path(p_path)), p_path, -1, false, expected_clg);
                if (result != 0) {
                   catalog::unlock();
                   atomic_inc(&nioerr);
                   return result;
                }
-               
+
                /* and again, maybe we find it in the nested catalog */
                if (!catalog::lookup_informed_unprotected(md5, find_catalog_id(path), d)) {
                   insert_cache_negative(md5);
@@ -1255,10 +1255,10 @@ namespace cvmfs {
          }
          /* OK, we have d from the catalog */
       }
-      
+
       insert_cache(md5, d);
       catalog::unlock();
-      
+
       /* The actual getattr-work */
       d.to_stat(info);
       //if (path == "/") {
@@ -1268,7 +1268,7 @@ namespace cvmfs {
          info->st_size = expand_env(d.symlink).length();
          pmesg(D_CVMFS, "stat %s expanded to %s", c_path, expand_env(d.symlink).c_str());
       }
-      
+
       return 0;
    }
 
@@ -1279,8 +1279,8 @@ namespace cvmfs {
    int cvmfs_readlink(const char *path, char *buf, size_t size) {
       const hash::t_md5 md5(catalog::mangled_path(path));
       Tracer::trace(Tracer::FUSE_READLINK, path, "readlink() call");
-      
-      struct catalog::t_dirent d;  
+
+      struct catalog::t_dirent d;
       catalog::lock();
       if (lookup_cache(md5, d)) {
          pmesg(D_CVMFS, "catalog cache HIT");
@@ -1295,20 +1295,20 @@ namespace cvmfs {
          }
       }
       catalog::unlock();
-      
-      
+
+
       if(!S_ISLNK(d.mode))
          return -ENOLINK;
-      
+
       const string lnk_exp = expand_env(d.symlink);
       unsigned len = (lnk_exp.length() >= size) ? size : lnk_exp.length()+1;
-      
+
       strncpy(buf, &lnk_exp[0], len-1);
       buf[len-1] = '\0';
-      
+
       return 0;
    }
-   
+
 
    /**
     * Open a file from cache.  If necessary, file is downloaded first.
@@ -1317,13 +1317,13 @@ namespace cvmfs {
     * \return Read-only file descriptor or -1 on failure (sets errno)
     */
    int cvmfs_open(const char *c_path)
-   { 
+   {
       const string path = c_path;
       Tracer::trace(Tracer::FUSE_OPEN, path, "open() call");
-      
+
       int fd = -1;
       const hash::t_md5 md5(catalog::mangled_path(path));
-      
+
       /* Look for it in the catalog. If it's not there, it doesn't exist. */
       struct catalog::t_dirent d;
       catalog::lock();
@@ -1347,7 +1347,7 @@ namespace cvmfs {
          }
       }
       catalog::unlock();
-      
+
       fd = cache::open_or_lock(d);
       atomic_inc64(&nopen);
       if (fd < 0) {
@@ -1356,7 +1356,7 @@ namespace cvmfs {
          pthread_mutex_unlock(&mutex_download);
          atomic_inc64(&ndownload);
       }
-      
+
       if (fd >= 0) {
          if (atomic_xadd(&open_files, 1) < ((int)nofiles)-NUM_RESERVED_FD || nofiles==0) {
             return fd;
@@ -1370,7 +1370,7 @@ namespace cvmfs {
                 c_path, d.checksum.to_string().c_str(), errno);
          if (errno == EMFILE) return -EMFILE;
       }
-      
+
       /* Prevent Squid DoS */
       time_t now = time(NULL);
       if (now-prev_io_error.timestamp < FORGET_DOS) {
@@ -1382,7 +1382,7 @@ namespace cvmfs {
          prev_io_error.delay = (random() % (MAX_INIT_IO_DELAY-1)) + 2;
       }
       prev_io_error.timestamp = now;
-      
+
       atomic_inc(&nioerr);
       return -EIO;
    }
@@ -1394,30 +1394,30 @@ namespace cvmfs {
    int cvmfs_close(int fd)
    {
       pmesg(D_CVMFS, "closeing file number %d", fd);
-      
+
       if (close(fd) == 0) atomic_dec(&open_files);
-      
+
       return 0;
    }
-   
-   
-   
+
+
+
    /**
     * Emulates the getattr walk done by Fuse
     */
    static int walk_path(const string &path) {
       struct stat info;
-      if ((path == "") || (path == "/")) 
+      if ((path == "") || (path == "/"))
          return cvmfs_getattr("/", &info);
 
       int attr_result = walk_path(get_parent_path(path));
       if (attr_result == 0)
          return cvmfs_getattr(path.c_str(), &info);
-      
+
       return attr_result;
    }
-   
-   
+
+
    /**
     * Removes a file from local cache
     */
@@ -1425,12 +1425,12 @@ namespace cvmfs {
       int attr_result = walk_path(path);
       if (attr_result != 0)
          return attr_result;
-      
+
       const hash::t_md5 md5(catalog::mangled_path(path));
       int result;
-      
+
       catalog::lock();
-      
+
       catalog::t_dirent d;
       if (catalog::lookup_informed_unprotected(md5, find_catalog_id(path), d)) {
          if ((!(d.flags & catalog::FILE)) || (d.flags & catalog::FILE_LINK)) {
@@ -1442,28 +1442,28 @@ namespace cvmfs {
       } else {
          result = -ENOENT;
       }
-         
+
       catalog::unlock();
-      
+
       return result;
    }
 
 
    int cvmfs_statfs(const char *path __attribute__((unused)), struct statvfs *info)
    {
-      /* If we return 0 it will cause the fs 
+      /* If we return 0 it will cause the fs
          to be ignored in "df" */
       memset(info, 0, sizeof(*info));
-      
+
       /* Unmanaged cache */
       if (lru::capacity() == 0)
          return 0;
-      
+
       uint64_t available = 0;
       uint64_t size = lru::size();
-      
+
       info->f_bsize = 1;
-      
+
       if (lru::capacity() == (uint64_t)(-1)) {
          /* Unrestricted cache, look at free space on cache dir fs */
          struct statfs cache_buf;
@@ -1478,43 +1478,43 @@ namespace cvmfs {
          info->f_blocks = lru::capacity();
          available = lru::capacity() - size;
       }
-      
+
       //info->f_blocks = 50000000000L;
       //available = 20000000000L;
-      
+
       info->f_bfree = info->f_bavail = available;
-      
+
       return 0;
    }
-   
-   
+
+
    static int fill_xattr(const string src, char *dst, const size_t ldst) {
       size_t lsrc = src.length();
 
       if (!dst)
          return lsrc;
-      
+
       if (src.length() > ldst)
          return -ERANGE;
-      
+
       memcpy(dst, &src[0], lsrc);
       return lsrc;
    }
-   
+
    int cvmfs_getxattr(const char *path, const char *name, char *value, size_t vlen) {
       const string attr = name;
       catalog::t_dirent d;
       hash::t_md5 md5(catalog::mangled_path(path));
-      
+
       pmesg(D_CVMFS, "getxattr %s on %s", name, path);
-      
-      catalog::lock();      
+
+      catalog::lock();
       if (!catalog::lookup_informed_unprotected(md5, find_catalog_id(path), d)) {
          catalog::unlock();
          return -ENOENT;
       }
       catalog::unlock();
-      
+
       if (attr == "user.pid") {
          ostringstream result;
          result << cvmfs::pid;
@@ -1534,12 +1534,12 @@ namespace cvmfs {
             int fd = cache::open(d.checksum);
             if (fd < 0)
                return fill_xattr("Not in cache", value, vlen);
-            
+
             hash::t_sha1 hash;
             FILE *f = fdopen(fd, "r");
             if (!f)
                return -EIO;
-            
+
             if (compress_file_sha1_only(f, hash.digest) != 0) {
                fclose(f);
                return -EIO;
@@ -1552,7 +1552,7 @@ namespace cvmfs {
          catalog::lock();
          const uint64_t revision = catalog::get_revision();
          catalog::unlock();
-         
+
          ostringstream result;
          result << revision;
          return fill_xattr(result.str(), value, vlen);
@@ -1561,7 +1561,7 @@ namespace cvmfs {
          int catalog_id = find_catalog_id(path);
          time_t expires = catalog_tree::get_catalog(catalog_id)->expires;
          catalog::unlock();
-         
+
          time_t now = time(NULL);
          ostringstream result;
          result << (expires-now)/60;
@@ -1598,7 +1598,7 @@ namespace cvmfs {
          } else {
             proxy = "DIRECT";
          }
-         
+
          return fill_xattr(proxy, value, vlen);
       } else if (attr == "user.host") {
          int num;
@@ -1609,7 +1609,7 @@ namespace cvmfs {
          const string host = string(all_hosts[current]);
          free(rtt);
          free(all_hosts);
-         
+
          return fill_xattr(host, value, vlen);
       } else if (attr == "user.uptime") {
          time_t now = time(NULL);
@@ -1625,7 +1625,7 @@ namespace cvmfs {
             result << (uptime / 60)%60 << " minutes, ";
          }*/
          result << uptime / 60;
-         
+
          return fill_xattr(result.str(), value, vlen);
       } else if (attr == "user.nclg") {
          catalog::lock();
@@ -1633,37 +1633,37 @@ namespace cvmfs {
          catalog::unlock();
          ostringstream result;
          result << num;
-         
+
          return fill_xattr(result.str(), value, vlen);
       } else if (attr == "user.nopen") {
          ostringstream result;
          result << atomic_read64(&nopen);
-         
+
          return fill_xattr(result.str(), value, vlen);
       } else if (attr == "user.ndownload") {
          ostringstream result;
          result << atomic_read64(&ndownload);
-         
+
          return fill_xattr(result.str(), value, vlen);
       } else if (attr == "user.timeout") {
          unsigned seconds, seconds_direct;
          curl_get_timeout(&seconds, &seconds_direct);
          ostringstream result;
          result << seconds;
-         
+
          return fill_xattr(result.str(), value, vlen);
       } else if (attr == "user.timeout_direct") {
          unsigned seconds, seconds_direct;
          curl_get_timeout(&seconds, &seconds_direct);
          ostringstream result;
          result << seconds_direct;
-         
+
          return fill_xattr(result.str(), value, vlen);
       } else if (attr == "user.rx") {
          int64_t rx = curl_get_allbytes();
          ostringstream result;
          result << rx/1024;
-         
+
          return fill_xattr(result.str(), value, vlen);
       } else if (attr == "user.speed") {
          int64_t rx = curl_get_allbytes();
@@ -1673,13 +1673,13 @@ namespace cvmfs {
             result << "n/a";
          else
             result << (rx/1024)/time;
-         
+
          return fill_xattr(result.str(), value, vlen);
       }
-   
+
       return -ENOATTR;
    }
-   
+
    static void append_string_to_list(char const *str,char ***buf,size_t *listlen,size_t *buflen)
    {
       if( *listlen + 1 >= *buflen ) {
@@ -1736,7 +1736,7 @@ namespace cvmfs {
             return -ENOENT;
          }
 
-         int result = load_and_attach_catalog(path, 
+         int result = load_and_attach_catalog(path,
             hash::t_md5(catalog::mangled_path(path)), path, -1, false, expected_clg);
          if (result != 0) {
             catalog::unlock();
@@ -1760,8 +1760,8 @@ namespace cvmfs {
 
       vector<catalog::t_dirent> dir = catalog::ls_unprotected(md5);
       catalog::unlock();
-      for (vector<catalog::t_dirent>::const_iterator i = dir.begin(), iEnd = dir.end(); 
-           i != iEnd; ++i) 
+      for (vector<catalog::t_dirent>::const_iterator i = dir.begin(), iEnd = dir.end();
+           i != iEnd; ++i)
       {
          append_string_to_list(i->name.c_str(),buf,&listlen,buflen);
       }
@@ -1781,9 +1781,9 @@ pthread_mutex_t *libcrypto_locks;
 static void libcrypto_lock_callback(int mode, int type, const char *file, int line) {
   (void)file;
   (void)line;
-  
+
   int retval;
-  
+
   if (mode & CRYPTO_LOCK) {
     retval = pthread_mutex_lock(&(libcrypto_locks[type]));
   } else {
@@ -1791,7 +1791,7 @@ static void libcrypto_lock_callback(int mode, int type, const char *file, int li
   }
   assert(retval == 0);
 }
- 
+
 static unsigned long libcrypto_thread_id()
 {
    return (unsigned long)pthread_self();
@@ -1803,7 +1803,7 @@ static void libcrypto_mt_setup() {
       int retval = pthread_mutex_init(&(libcrypto_locks[i]), NULL);
       assert(retval == 0);
    }
-   
+
    CRYPTO_set_id_callback(libcrypto_thread_id);
    CRYPTO_set_locking_callback(libcrypto_lock_callback);
 }
@@ -1812,7 +1812,7 @@ static void libcrypto_mt_cleanup(void) {
    CRYPTO_set_locking_callback(NULL);
    for (int i = 0; i < CRYPTO_num_locks(); ++i)
       pthread_mutex_destroy(&(libcrypto_locks[i]));
- 
+
    OPENSSL_free(libcrypto_locks);
 }
 
@@ -1865,7 +1865,7 @@ int cvmfs_common_init(
 {
    int err_catalog;
    int num_hosts;
-   
+
    options_ready = false;
    curl_ready = false;
    cache_ready = false;
@@ -1878,9 +1878,9 @@ int cvmfs_common_init(
    boot_time = time(NULL);
    prev_io_error.timestamp = 0;
    prev_io_error.delay = 0;
-   
+
    libcrypto_mt_setup();
-   
+
    /* Tune SQlite3 memory */
    sqlite_scratch = smalloc(8192*16); /* 8 KB for 8 threads (2 slots per thread) */
    sqlite_page_cache = smalloc(1280*3275); /* 4MB */
@@ -1888,7 +1888,7 @@ int cvmfs_common_init(
    assert(sqlite3_config(SQLITE_CONFIG_PAGECACHE, sqlite_page_cache, 1280, 3275) == SQLITE_OK);
    assert(sqlite3_config(SQLITE_CONFIG_LOOKASIDE, 32, 128) == SQLITE_OK); /* 4 KB */
    sqlite3_initialize();
-   
+
    /* Catalog memory cache */
    for (int i = 0; i < CATALOG_CACHE_SIZE; ++i) {
       catalog_cache[i].md5 = hash::t_md5();
@@ -1898,10 +1898,10 @@ int cvmfs_common_init(
    atomic_init(&cache_cleans);
    atomic_init(&cache_hits);
    atomic_init(&cache_misses);
-   
+
    atomic_init(&certificate_hits);
    atomic_init(&certificate_misses);
-   
+
    atomic_init64(&nopen);
    atomic_init64(&ndownload);
 
@@ -1936,16 +1936,16 @@ int cvmfs_common_init(
    }
    if (iter_hostname == 0) cvmfs::root_url = "";
    else cvmfs::root_url = string(cvmfs_opts_hostname, 0, iter_hostname);
-      
+
    if (cvmfs_opts_whitelist.length()) cvmfs::whitelist = cvmfs_opts_whitelist;
    else cvmfs::whitelist = "/.cvmfswhitelist";
    options_ready = true;
-   
+
    /* Syslog level */
    syslog_setlevel(cvmfs_opts_syslog_level);
    if (cvmfs::repo_name != "")
       syslog_setprefix(cvmfs::repo_name.c_str());
-   
+
    /* Maximum number of open files */
    if (cvmfs_opts_nofiles) {
       if (cvmfs_opts_nofiles < 0) {
@@ -1963,7 +1963,7 @@ int cvmfs_common_init(
          goto cvmfs_cleanup;
       }
    }
-   
+
    /* Grab mountpoint */
    if (cvmfs_opts_grab_mountpoint) {
       if ((chown(cvmfs::mountpoint.c_str(), uid, gid) != 0) ||
@@ -1973,12 +1973,12 @@ int cvmfs_common_init(
          goto cvmfs_cleanup;
       }
    }
-   
+
    /* Set debug log file */
    if (cvmfs_opts_logfile.length()) {
 	   debug_set_log(cvmfs_opts_logfile.c_str());
    }
-   
+
    /* Drop rights */
    if ((cvmfs::uid != 0) || (cvmfs::gid != 0)) {
       cout << "CernVM-FS: running with credentials " << cvmfs::uid << ":" << cvmfs::gid << endl;
@@ -1987,12 +1987,12 @@ int cvmfs_common_init(
          goto cvmfs_cleanup;
       }
    }
-   
+
    /* CVMFS has its own proxy environment, chain of proxies */
    num_hosts = curl_set_host_chain(cvmfs_opts_hostname.c_str());
    curl_set_proxy_chain(cvmfs::proxies.c_str());
    curl_set_timeout(cvmfs_opts_timeout, cvmfs_opts_timeout_direct);
-                    
+
    if (!mkdir_deep(cvmfs::cachedir, 0700)) {
       cerr << "Failure: cache directory " << cvmfs::cachedir << " is unavailable" << endl;
       goto cvmfs_cleanup;
@@ -2005,8 +2005,8 @@ int cvmfs_common_init(
    }
 
    curl_ready = true;
-      
-   /* Try to init the cache... this creates a set of directories in 
+
+   /* Try to init the cache... this creates a set of directories in
       cvmfs::cachedir (256 directories named 00..ff) */
    if (!cache::init(relative_cachedir, cvmfs::root_url, &mutex_download)) {
       cerr << "Failed to setup cache in " << cvmfs::cachedir << ": " << strerror(errno) << endl;
@@ -2014,7 +2014,7 @@ int cvmfs_common_init(
       goto cvmfs_cleanup;
    }
    cache_ready = true;
-   
+
    if( cvmfs_opts_nofiles ) {
       /* Monitor, check for maximum number of open files */
       if (!monitor::init(relative_cachedir, true)) {
@@ -2027,15 +2027,16 @@ int cvmfs_common_init(
 
    atomic_init(&cvmfs::open_files);
    atomic_init(&cvmfs::nioerr);
-      
+
    signature::init();
-   if (!signature::load_public_key(pubkey)) {
+   if (!signature::load_public_keys(pubkey)) {
       cout << "Warning: cvmfs public master key could not be loaded. Cvmfs will fail on signed catalogs!" << endl;
    } else {
-      cout << "CernVM-FS: using public key " << pubkey << endl;
+      cout << "CernVM-FS: using public key "
+           << join_strings(split_string(pubkey, ':'), ", ") << endl;
    }
    signature_ready = true;
-   
+
    /* Init quota / lru cache */
    if (cvmfs_opts_quota_limit < 0) {
       pmesg(D_CVMFS, "unlimited cache size");
@@ -2045,9 +2046,9 @@ int cvmfs_common_init(
       cvmfs_opts_quota_limit *= 1024*1024;
       cvmfs_opts_quota_threshold *= 1024*1024;
    }
-   if (!lru::init(relative_cachedir, (uint64_t)cvmfs_opts_quota_limit, 
+   if (!lru::init(relative_cachedir, (uint64_t)cvmfs_opts_quota_limit,
                        (uint64_t)cvmfs_opts_quota_threshold,
-                       cvmfs_opts_rebuild_cachedb)) 
+                       cvmfs_opts_rebuild_cachedb))
    {
       cerr << "Failed to initialize lru cache" << endl;
       goto cvmfs_cleanup;
@@ -2069,10 +2070,10 @@ int cvmfs_common_init(
       }
    }
    if (cvmfs_opts_quota_limit) {
-      cout << "CernVM-FS: quota initialized, current size " << lru::size()/(1024*1024) 
+      cout << "CernVM-FS: quota initialized, current size " << lru::size()/(1024*1024)
            << "MB" << endl;
    }
-      
+
    /* Create the file catalog from the web server */
    if (!catalog::init(cvmfs::uid, cvmfs::gid)) {
       cerr << "Failed to initialize catalog" << endl;
@@ -2097,7 +2098,7 @@ int cvmfs_common_init(
       goto cvmfs_cleanup;
    }
    catalog_ready = true;
-      
+
    if (cvmfs_opts_enable_talk) {
       if (!talk::init(relative_cachedir)) {
          cerr << "Failed to initialize talk socket (" << errno << ")" << endl;
@@ -2105,7 +2106,7 @@ int cvmfs_common_init(
       }
       talk_ready = true;
    }
-      
+
    cout << "CernVM-FS: linking to remote directory " << cvmfs::root_url << endl;
    logmsg("CernVM-FS: linking %s to remote directory %s", cvmfs::mountpoint.c_str(), cvmfs::root_url.c_str());
 
@@ -2125,13 +2126,13 @@ void cvmfs_common_fini()
    if (cache_ready) cache::fini();
    if (monitor_ready) monitor::fini();
    Tracer::fini();
-   
+
    sqlite3_shutdown();
    free(sqlite_page_cache);
    free(sqlite_scratch);
    sqlite_page_cache = NULL;
    sqlite_scratch = NULL;
-   
+
    libcrypto_mt_cleanup();
 }
 

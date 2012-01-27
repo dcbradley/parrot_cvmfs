@@ -1,10 +1,10 @@
 Summary: CernVM File System
 Name: cvmfs
-Version: 2.0.7
+Version: 2.0.9
 Release: 1%{?dist}
 Source0: https://cernvm.cern.ch/project/trac/downloads/cernvm/%{name}-%{version}.tar.gz
 Group: System/Filesystems
-License: Copyright (c) 2.0.7, CERN.  Distributed unter the BSD License.
+License: Copyright (c) 2.0.9, CERN.  Distributed unter the BSD License.
 
 %if 0%{?suse_version}
   Substitute: chkconfig aaa_base
@@ -81,7 +81,6 @@ fi
 /etc/auto.cvmfs
 /etc/cvmfs/config.sh
 /sbin/mount.cvmfs
-/sbin/umount.cvmfs
 %dir /etc/cvmfs/config.d
 %dir /etc/cvmfs/domain.d
 %dir /cvmfs

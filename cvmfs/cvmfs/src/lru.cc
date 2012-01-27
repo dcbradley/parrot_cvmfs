@@ -141,7 +141,7 @@ namespace lru {
          /* cleanup, move to trash and unlink when unlocked */
          if (gauge + size > limit) {
             pmesg(D_LRU, "over limit, gauge %lu, file size %lu", gauge, size);
-            if (!cleanup_unprotected(cleanup_threshold)) {
+            if (!cleanup_unprotected(/*limit-size*/cleanup_threshold)) {
                pthread_mutex_unlock(&mutex);
                continue;
             }
@@ -832,6 +832,7 @@ namespace lru {
    uint64_t max_file_size() {
       if (limit == 0) return INT64_MAX;
       return limit - cleanup_threshold;
+      //return limit;
    }
    
    uint64_t capacity() {

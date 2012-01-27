@@ -6,7 +6,7 @@
  * Developed by Jakob Blomer 2010 at CERN
  * jakob.blomer@cern.ch
  */
- 
+
 #define _FILE_OFFSET_BITS 64
 
 #include "config.h"
@@ -40,7 +40,7 @@ using namespace std;
 
 string canonical_path(const string &p) {
    if (p.length() == 0) return p;
-   
+
    if (p[p.length()-1] == '/')
       return p.substr(0, p.length()-1);
    else
@@ -69,7 +69,7 @@ bool is_empty_dir(const string &path) {
    DIR *dir = opendir(path.c_str());
    if (!dir)
       return true;
-      
+
    struct dirent64 *d;
    while ((d = readdir64(dir)) != NULL) {
       if ((string(d->d_name) == ".") || (string(d->d_name) == "..")) continue;
@@ -87,21 +87,21 @@ bool file_exists(const string &path) {
 
 bool mkdir_deep(const std::string &path, mode_t mode) {
    if (path == "") return false;
-   
+
    int res = mkdir(path.c_str(), mode);
    if (res == 0) return true;
-   
+
    if (errno == EEXIST) {
       struct stat64 info;
       if ((stat64(path.c_str(), &info) == 0) && S_ISDIR(info.st_mode))
          return true;
       return false;
    }
-   
+
    if ((errno == ENOENT) && (mkdir_deep(get_parent_path(path), mode))) {
       return mkdir(path.c_str(), mode) == 0;
    }
-   
+
    return false;
 }
 
@@ -111,14 +111,14 @@ bool mkdir_deep(const std::string &path, mode_t mode) {
  */
 string expand_env(const string &path) {
    string result = "";
-   
+
    for (string::size_type i = 0; i < path.length(); i++) {
       string::size_type lpar;
       string::size_type rpar;
-      if ((path[i] == '$') && 
+      if ((path[i] == '$') &&
           ((lpar = path.find('(', i+1)) != string::npos) &&
           ((rpar = path.find(')', i+2)) != string::npos) &&
-          (rpar > lpar))  
+          (rpar > lpar))
       {
          string var = path.substr(lpar + 1, rpar-lpar-1);
          char *var_exp = getenv(var.c_str()); /* Don't free! Nothing is allocated here */
@@ -130,7 +130,7 @@ string expand_env(const string &path) {
          result += path[i];
       }
    }
-   
+
    return result;
 }
 
@@ -140,7 +140,7 @@ string expand_env(const string &path) {
  */
 bool make_cache_dir(const string &path, const mode_t mode) {
    const string cpath = canonical_path(path);
-   
+
    string lpath = cpath + "/quarantaine";
    if (!mkdir_deep(lpath, mode)) return false;
 
@@ -170,17 +170,17 @@ string localtime_ascii(time_t seconds, const bool utc) {
    } else {
       gmtime_r(&seconds, &timestamp);
    }
-   
+
    const string months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
                             "Sep", "Oct", "Nov", "Dec"};
    ostringstream result;
-   result << timestamp.tm_mday << " " 
+   result << timestamp.tm_mday << " "
           << months[timestamp.tm_mon] << " "
           << timestamp.tm_year + 1900 << " "
           << setw(2) << setfill('0') << timestamp.tm_hour << ":"
           << setw(2) << setfill('0') << timestamp.tm_min << ":"
           << setw(2) << setfill('0') << timestamp.tm_sec;
-   
+
    return result.str();
 }
 
@@ -190,7 +190,7 @@ bool parse_keyval(const string filename, map<char, string> &content) {
    f.open(filename.c_str());
    if (!f)
       return false;
-      
+
    string line;
    while (getline(f, line)) {
       //printf("LINE: %s\n", line.c_str());
@@ -202,7 +202,7 @@ bool parse_keyval(const string filename, map<char, string> &content) {
       const string tail = (line.length() == 1) ? "" : line.substr(1);
       content[line[0]] = tail;
 	}
-   
+
    f.close();
    return true;
 }
@@ -211,7 +211,7 @@ bool parse_keyval(const char *buf, const int size, int &sig_start,
                   hash::t_sha1 &sha1, map<char, std::string> &content)
 {
    istringstream s(string(buf, size));
-   
+
    string line;
    unsigned pos = 0;
    while (getline(s, line)) {
@@ -224,7 +224,7 @@ bool parse_keyval(const char *buf, const int size, int &sig_start,
       const string tail = (line.length() == 1) ? "" : line.substr(1);
       content[line[0]] = tail;
 	}
-   
+
    sig_start = pos;
    if (getline(s, line)) {
       //printf("LINE: %s, sigstart %u \n", line.c_str(), pos);
@@ -233,7 +233,7 @@ bool parse_keyval(const char *buf, const int size, int &sig_start,
       sig_start = -1;
       sha1 = hash::t_sha1();
    }
-   
+
    return true;
 }
 
@@ -242,8 +242,8 @@ bool parse_keyval(const char *buf, const int size, int &sig_start,
  * Reads after skip bytes in memory, looks for a line break and saves
  * the rest into sig_buf, which will be allocated.
  */
-bool read_sig_tail(const void *buf, const unsigned buf_size, const unsigned skip, 
-                   void **sig_buf, unsigned *sig_buf_size) 
+bool read_sig_tail(const void *buf, const unsigned buf_size, const unsigned skip,
+                   void **sig_buf, unsigned *sig_buf_size)
 {
    unsigned i;
    for (i = skip; i < buf_size; ++i) {
@@ -267,10 +267,10 @@ bool write_memchunk(const string &path, const void *chunk, const int &size) {
    int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, plain_file_mode);
    if (fd < 0)
       return false;
-      
+
    int written = write(fd, chunk, size);
    close(fd);
-   
+
    return written == size;
 }
 
@@ -280,13 +280,13 @@ FILE *temp_file(const string &path_prefix, const int mode, const char *open_flag
    final_path = path_prefix + ".XXXXXX";
    char *tmp_file = strdupa(final_path.c_str());
    int tmp_fd = mkstemp(tmp_file);
-   if (tmp_fd < 0) 
+   if (tmp_fd < 0)
       return NULL;
    if (fchmod(tmp_fd, mode) != 0) {
       close(tmp_fd);
       return NULL;
    }
-   
+
    final_path = tmp_file;
    FILE *tmp_fp = fdopen(tmp_fd, open_flags);
    if (!tmp_fp) {
@@ -294,9 +294,39 @@ FILE *temp_file(const string &path_prefix, const int mode, const char *open_flag
       unlink(tmp_file);
       return NULL;
    }
-   
+
    return tmp_fp;
 }
 
 
+vector<string> split_string(const string &str, const char delim) {
+   vector<string> result;
+
+   const unsigned size = str.size();
+   unsigned marker = 0;
+   unsigned i;
+   for (i = 0; i < size; ++i) {
+      if (str[i] == delim) {
+         result.push_back(str.substr(marker, i-marker));
+         marker = i+1;
+      }
+   }
+   result.push_back(str.substr(marker, i-marker));
+
+   return result;
+}
+
+
+string join_strings(const vector<string> &strings, const string &joint) {
+   string result = "";
+   const unsigned size = strings.size();
+
+   if (size > 0) {
+      result = strings[0];
+      for (unsigned i = 1; i < size; ++i)
+         result += joint + strings[i];
+   }
+
+   return result;
+}
 

@@ -7,6 +7,7 @@
 
 #include <string>
 #include <map>
+#include <vector>
 #include <time.h>
 #include <sys/time.h>
 #include <sys/stat.h>
@@ -16,8 +17,8 @@
 const int plain_file_mode = S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH;
 const int plain_dir_mode = S_IXUSR | S_IWUSR | S_IRUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
 const int full_file_mode = S_IWUSR | S_IRUSR | S_IWGRP | S_IRGRP | S_IWOTH | S_IROTH;
-const int full_dir_mode = S_IWUSR | S_IRUSR | S_IXUSR | 
-                          S_IWGRP | S_IRGRP | S_IXGRP | 
+const int full_dir_mode = S_IWUSR | S_IRUSR | S_IXUSR |
+                          S_IWGRP | S_IRGRP | S_IXGRP |
                           S_IWOTH | S_IROTH | S_IXOTH;
 
 
@@ -33,11 +34,13 @@ std::string localtime_ascii(time_t seconds, const bool utc);
 bool parse_keyval(const std::string filename, std::map<char, std::string> &content);
 bool parse_keyval(const char *buf, const int size, int &sig_start,
                   hash::t_sha1 &sha1, std::map<char, std::string> &content);
-bool read_sig_tail(const void *buf, const unsigned buf_size, const unsigned skip, 
-                   void **sig_buf, unsigned *sig_buf_size); 
+bool read_sig_tail(const void *buf, const unsigned buf_size, const unsigned skip,
+                   void **sig_buf, unsigned *sig_buf_size);
 bool write_memchunk(const std::string &patch, const void *chunk, const int &size);
 FILE *temp_file(const std::string &path_prefix, const int mode, const char *open_flags,
                 std::string &final_path);
-
+std::vector<std::string> split_string(const std::string &str, const char delim);
+std::string join_strings(const std::vector<std::string> &strings,
+                         const std::string &joint);
 
 #endif
