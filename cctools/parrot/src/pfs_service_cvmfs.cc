@@ -26,12 +26,13 @@ extern "C" {
 #include <sys/statfs.h>
 #include <time.h>
 #include <assert.h>
+#include <string>
+#include <list>
 extern int pfs_master_timeout;
-extern int pfs_checksum_files;
 extern char pfs_temp_dir[];
-extern struct file_cache *pfs_file_cache;
 
 
+static bool cvmfs_configured = false;
 static struct cvmfs_filesystem *cvmfs_filesystem_list = 0;
 static struct cvmfs_filesystem *cvmfs_active_filesystem = 0;
 static bool allow_switching_cvmfs_repos = false;
@@ -43,12 +44,18 @@ All known filesystem are kept in a linked list
 rooted at cvmfs_filesystem_list 
 */
 
-struct cvmfs_filesystem {
-	char host[PFS_PATH_MAX];
-	char path[PFS_PATH_MAX];
-	struct cvmfs_dirent *root;
+class cvmfs_filesystem {
+public:
+	std::string host;
+	std::string path;
 	struct cvmfs_filesystem *next;
-	char *cvmfs_options;
+	std::string cvmfs_options;
+	  // index into cvmfs_options+subst_offset to insert chars matching * in host
+	std::list<int> wildcard_subst;
+	int subst_offset;
+	bool match_wildcard;
+
+	cvmfs_filesystem *createMatch(char const *repo_name) const;
 };
 
 /*
@@ -158,19 +165,19 @@ static bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 					  "is not fully supported.  PARROT_ALLOW_SWITCHING_CVMFS_REPOSITORIES "
 					  "has been defined, so switching now from %s to %s.  "
 					  "Parrot may crash or perform poorly!",
-					  cvmfs_active_filesystem->host,
-					  f->host);
+					  cvmfs_active_filesystem->host.c_str(),
+					  f->host.c_str());
 			}
 
 			cvmfs_fini();
 			cvmfs_active_filesystem = NULL;
 		}
 
-		debug(D_CVMFS, "Initializing libcvmfs with the following options: %s", f->cvmfs_options);
+		debug(D_CVMFS, "Initializing libcvmfs with the following options: %s", f->cvmfs_options.c_str());
 
 		cvmfs_set_log_fn(cvmfs_parrot_logger);
 
-		int rc = cvmfs_init(f->cvmfs_options);
+		int rc = cvmfs_init(f->cvmfs_options.c_str());
 		if(rc != 0) {
 			return false;
 		}
@@ -179,45 +186,102 @@ static bool cvmfs_activate_filesystem(struct cvmfs_filesystem *f)
 	return true;
 }
 
-static struct cvmfs_filesystem *cvmfs_filesystem_create(const char *repo_name, const char *path, const char *user_options)
+static cvmfs_filesystem *cvmfs_filesystem_create(const char *repo_name, bool wildcard, const char *path, const char *user_options, std::list<int> const &subst)
 {
-	struct cvmfs_filesystem *f = (struct cvmfs_filesystem *) xxmalloc(sizeof(*f));
-	strcpy(f->host, repo_name);
-	strcpy(f->path, path);
+	cvmfs_filesystem *f = new cvmfs_filesystem;
+	f->subst_offset = 0;
+	f->next = NULL;
+	f->host = repo_name;
+	f->path = path;
 
 	char *proxy = getenv("HTTP_PROXY");
-	if( !proxy ) {
-		proxy = "DIRECT";
+	if( !proxy || !proxy[0] || !strcmp(proxy,"DIRECT") ) {
+		if( !strstr(user_options,"proxies=") ) {
+			debug(D_CVMFS|D_NOTICE,"CVMFS requires an http proxy.  None has been configured!");
+			debug(D_CVMFS,"Ignoring configuration of CVMFS repository %s",repo_name);
+			delete f;
+			return NULL;
+		}
 	}
 
 	if( !user_options ) {
 		user_options = "";
 	}
 
-	f->cvmfs_options = (char *)malloc(strlen(user_options)+2*strlen(repo_name)+strlen(pfs_temp_dir)+strlen(proxy)+100);
-	sprintf(f->cvmfs_options,
-			"repo_name=%s,cachedir=%s/cvmfs/%s,timeout=%d,timeout_direct=%d,proxies=%s,%s",
+	int repo_name_offset = 0;
+	int repo_name_in_cachedir_offset = 0;
+	char *buf = (char *)malloc(strlen(user_options)+2*strlen(repo_name)+strlen(pfs_temp_dir)+strlen(proxy?proxy:"")+100);
+	sprintf(buf,
+			"repo_name=%n%s,cachedir=%s/cvmfs/%n%s,timeout=%d,timeout_direct=%d%s%s,%n%s",
+			&repo_name_offset,
 			repo_name,
-			pfs_temp_dir, repo_name,
+			pfs_temp_dir,
+			&repo_name_in_cachedir_offset,
+			repo_name,
 			pfs_master_timeout,
 			pfs_master_timeout,
-			proxy,
+			proxy ? ",proxies=" : "",
+			proxy ? proxy : "",
+			&f->subst_offset,
 			user_options);
+	f->cvmfs_options = buf;
 
-	debug(D_CVMFS, "filesystem configured %s with repo path %s and options %s", repo_name, f->path, f->cvmfs_options);
+	f->match_wildcard = wildcard;
+	f->wildcard_subst = subst;
+	if( wildcard ) {
+		// make a note to fix up the repo name later
+		f->wildcard_subst.push_back(repo_name_in_cachedir_offset - f->subst_offset);
+		f->wildcard_subst.push_back(repo_name_offset - f->subst_offset);
+	}
+	return f;
+}
+
+/* A filesystem with a wildcard in its name has been matched.
+ * Create a filesystem entry representing the match.
+ */
+cvmfs_filesystem *cvmfs_filesystem::createMatch(char const *repo_name) const
+{
+	cvmfs_filesystem *f = new cvmfs_filesystem(*this);
+	f->match_wildcard = false;
+	f->host = repo_name;
+
+	// get the part of repo_name that matched the wildcard (i.e. the front)
+	std::string subst;
+	size_t subst_len = f->host.length() - host.length();
+	subst.append(repo_name,subst_len);
+
+	// substitute it into the options as needed
+	// (relies on wildcard_subst containing
+	// indices in decreasing order, so substitutions
+	// do not disturbe indices of remaining ones)
+	std::list<int>::const_iterator it;
+	for(it = wildcard_subst.begin();
+		it != wildcard_subst.end();
+		it++)
+	{
+		size_t pos = subst_offset + *it;
+		f->cvmfs_options.insert(pos,subst);
+	}
 
 	return f;
 }
+
 
 /* Read configuration for CVMFS repositories accessible to parrot.
  * Expected format of the configuration string:
  *   repo_name/subpath:cvmfs_options repo_name2/subpath:cvmfs_options ...
  *
- * The subpath is optional.  Literal spaces in the configuration must
- * be escaped with a backslash.
+ * The repo_name may begin with a * character, which matches one or
+ * more characters in the requested path.  The character(s) matched by
+ * the * replace any occurance of * in the options.  The subpath is
+ * optional.  Literal spaces or asterisks in the configuration must be
+ * escaped with a backslash.
  *
- * Example:
+ * Example for /cvmfs/cms.cern.ch:
  * cms.cern.ch:force_signing,pubkey=/path/to/cern.ch.pub,url=http://cvmfs-stratum-one.cern.ch/opt/cms
+ *
+ * Example with wildcard (using <*> to avoid compiler warning about nested comment):
+ * *.cern.ch:force_signing,pubkey=/path/to/cern.ch.pub,url=http://cvmfs-stratum-one.cern.ch/opt/<*>
  */
 static void cvmfs_read_config()
 {
@@ -227,7 +291,8 @@ static void cvmfs_read_config()
 	}
 
 	char *cvmfs_options = getenv("PARROT_CVMFS_REPO");
-	if( !cvmfs_options ) {
+	if( !cvmfs_options || !cvmfs_options[0] ) {
+		debug(D_CVMFS|D_NOTICE, "No CVMFS filesystems have been configured.  To access CVMFS, you must configure PARROT_CVMFS_REPO.");
 		return;
 	}
 
@@ -236,71 +301,75 @@ static void cvmfs_read_config()
 	}
 
 	while( *cvmfs_options ) {
-		char *start = cvmfs_options;
-		for(; *cvmfs_options && !isspace(*cvmfs_options); cvmfs_options++ ) {
+		std::string repo_name;
+		std::string subpath;
+		std::string options;
+		std::list<int> wildcard_subst;
+
+		// first comes optional wildcard in repo name
+		bool contains_wildcard = false;
+		if( *cvmfs_options == '*' ) {
+			contains_wildcard = true;
+			cvmfs_options++;
+		}
+		// next comes the repo name
+		for(; *cvmfs_options; cvmfs_options++ ) {
+			if( *cvmfs_options == '/' || *cvmfs_options == ':' || isspace(*cvmfs_options) ) {
+				break;
+			}
 			if( *cvmfs_options == '\\' ) {
 				cvmfs_options++;
 				if( *cvmfs_options == '\0' ) break;
 			}
+			repo_name += *cvmfs_options;
+		}
+		// next comes the optional repo subpath
+		if( *cvmfs_options == '/' ) for(; *cvmfs_options; cvmfs_options++ ) {
+			if( *cvmfs_options == ':' || isspace(*cvmfs_options) ) {
+				break;
+			}
+			if( *cvmfs_options == '\\' ) {
+				cvmfs_options++;
+				if( *cvmfs_options == '\0' ) break;
+			}
+			subpath += *cvmfs_options;
+		}
+		if( *cvmfs_options == ':' ) {
+			cvmfs_options++;
+		}
+		// next comes the options
+		for(; *cvmfs_options; cvmfs_options++ ) {
+			if( isspace(*cvmfs_options) ) {
+				break;
+			}
+			if( *cvmfs_options == '*' ) {
+
+				// must save substitutions in order of decreasing
+				// index for createMatch()
+
+				wildcard_subst.push_front(options.length());
+				continue;
+			}
+			if( *cvmfs_options == '\\' ) {
+				cvmfs_options++;
+				if( *cvmfs_options == '\0' ) break;
+			}
+			options += *cvmfs_options;
 		}
 
-		char *repo = strdup(start);
-		size_t pos = strcspn(repo,"/:");
-		repo[pos] = '\0';
-
-		char *path = NULL;
-		start += pos;
-		if( *start == '/' ) {
-			path = strdup(start);
-			pos = strcspn(path,":");
-			path[pos] = '\0';
-			start += pos;
-		}
-		else {
-			path = strdup("/");
-		}
-
-		char *options = NULL;
-		if( *start == ':' ) {
-			start++;
-			options = strdup(start);
-			options[cvmfs_options-start] = '\0';
-		}
-
-		cvmfs_filesystem *f = cvmfs_filesystem_create(repo,path,options);
+		cvmfs_filesystem *f = cvmfs_filesystem_create(repo_name.c_str(),contains_wildcard,subpath.c_str(),options.c_str(),wildcard_subst);
 		if(f) {
+			debug(D_CVMFS, "filesystem configured %c%s with repo path %s and options %s",
+				  contains_wildcard ? '*' : ' ',
+				  f->host.c_str(), f->path.c_str(), f->cvmfs_options.c_str());
 			f->next = cvmfs_filesystem_list;
 			cvmfs_filesystem_list = f;
 		}
-
-		free(repo);
-		free(path);
-		free(options);
 
 		while( isspace(*cvmfs_options) ) {
 			cvmfs_options++;
 		}
 	}
-}
-
-/*
-Recursively destroy a cvmfs filesystem object.
-*/
-
-static void cvmfs_filesystem_delete(struct cvmfs_filesystem *f)
-{
-	if(!f)
-		return;
-	cvmfs_filesystem_delete(f->next);
-
-	free(f->cvmfs_options);
-
-	if(cvmfs_active_filesystem == f) {
-		cvmfs_fini();
-		cvmfs_active_filesystem = NULL;
-	}
-
-	free(f);
 }
 
 static cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath_result)
@@ -316,32 +385,55 @@ static cvmfs_filesystem *lookup_filesystem(pfs_name * name, char const **subpath
 		return 0;
 	}
 
-	if( !cvmfs_filesystem_list ) {
+	if( !cvmfs_configured ) {
+		cvmfs_configured = true;
 		cvmfs_read_config();
 	}
 	if( !cvmfs_filesystem_list ) {
-		debug(D_CVMFS|D_NOTICE, "No CVMFS filesystems have been configured.  To access CVMFS, you must configure PARROT_CVMFS_REPO.");
 		errno = ENOENT;
 		return 0;
 	}
 
+	size_t namelen = strlen(name->host);
 	for(f = cvmfs_filesystem_list; f; f = f->next) {
-		if(!strcmp(f->host, name->host)) {
-			subpath = compare_path_prefix(f->path, name->rest);
-			if(!subpath) {
-				subpath = compare_path_prefix(name->rest, f->path);
-				if(subpath) {
-					debug(D_CVMFS, "lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
-					errno = ENOENT;
-					return 0;
-				} else {
-					continue;
-				}
+		if( f->match_wildcard ) {
+			size_t hostlen = f->host.length();
+			if( hostlen >= namelen || strcmp(f->host.c_str(),name->host+(namelen-hostlen))!=0 ) {
+				continue;
 			}
-			debug(D_CVMFS, "lookup_filesystem(%s,%s) --> %s,%s,%s", name->host, name->rest, f->host, f->path, subpath);
-			*subpath_result = subpath;
-			return f;
 		}
+		else if(strcmp(f->host.c_str(),name->host)!=0) {
+			continue;
+		}
+
+		// the host part patches, now check subpath
+		subpath = compare_path_prefix(f->path.c_str(), name->rest);
+		if(!subpath) {
+			subpath = compare_path_prefix(name->rest, f->path.c_str());
+			if(subpath) {
+				debug(D_CVMFS, "lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
+				errno = ENOENT;
+				return 0;
+			} else {
+				continue;
+			}
+		}
+
+		*subpath_result = subpath;
+		debug(D_CVMFS, "lookup_filesystem(%s,%s) --> %s,%s,%s", name->host, name->rest, f->host.c_str(), f->path.c_str(), subpath);
+
+		if( f->match_wildcard ) {
+			// create a new filesystem entry for this specific match of the pattern
+			f = f->createMatch(name->host);
+			debug(D_CVMFS, "filesystem configured from pattern: %s with repo path %s and options %s", f->host.c_str(), f->path.c_str(), f->cvmfs_options.c_str());
+
+			// insert new instance at front of list, so in future we test it before
+			// the general pattern
+			f->next = cvmfs_filesystem_list;
+			cvmfs_filesystem_list = f;
+		}
+
+		return f;
 	}
 
 	debug(D_CVMFS, "lookup_filesystem(%s,%s) --> ENOENT", name->host, name->rest);
