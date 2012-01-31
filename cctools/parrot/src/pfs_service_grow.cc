@@ -439,14 +439,14 @@ struct grow_filesystem * grow_filesystem_create( const char *hostport, const cha
 
 	debug(D_GROW,"checksumming %s",filename);
 
-	if(!dttools_sha1_file(filename,digest)) {
+	if(!sha1_file(filename,digest)) {
 		debug(D_GROW,"couldn't checksum %s: %s",filename,strerror(errno));
 		goto sleep_retry;
 	}
 	
-	debug(D_GROW,"local checksum: %s",dttools_sha1_string(digest));
+	debug(D_GROW,"local checksum: %s",sha1_string(digest));
 
-	if(strcmp((char*)checksum,dttools_sha1_string(digest))) {
+	if(strcmp((char*)checksum,sha1_string(digest))) {
 		debug(D_GROW,"checksum does not match, reloading...");
 		file_cache_delete(pfs_file_cache,url);
 		goto sleep_retry;
@@ -597,7 +597,7 @@ public:
 		} else if(pfs_checksum_files) {
 			unsigned char digest[SHA1_DIGEST_LENGTH];
 			sha1_final(digest,&context);
-			if(!strcmp(dttools_sha1_string(digest),d->checksum)) {
+			if(!strcmp(sha1_string(digest),d->checksum)) {
 				return 0;
 			} else {
 				debug(D_GROW,"checksum failed on %s, will reload...",name.path);
