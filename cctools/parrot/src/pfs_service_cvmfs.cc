@@ -10,11 +10,8 @@ See the file COPYING for details.
 
 extern "C" {
 #include "debug.h"
-#include "full_io.h"
-#include "xmalloc.h"
-#include "macros.h"
-#include "sha1.h"
 }
+
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
@@ -28,9 +25,9 @@ extern "C" {
 #include <assert.h>
 #include <string>
 #include <list>
+
 extern int pfs_master_timeout;
 extern char pfs_temp_dir[];
-
 
 static bool cvmfs_configured = false;
 static struct cvmfs_filesystem *cvmfs_filesystem_list = 0;
