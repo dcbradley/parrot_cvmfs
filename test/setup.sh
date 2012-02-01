@@ -10,12 +10,12 @@ if ! [ -f $PREFIX/cms.hep.wisc.edu.pub ]; then
 else
 
   if [ "$HTTP_PROXY" = "" ]; then
-    cvmfs_proxies="proxies=frontier01.hep.wisc.edu:3128;fronteir02.hep.wisc.edu:3128,"
+    export HTTP_PROXY="frontier01.hep.wisc.edu:3128;fronteir02.hep.wisc.edu:3128"
   fi
 
   export PARROT_CVMFS_REPO="
-    cms.hep.wisc.edu:force_signing,pubkey=$PREFIX/cms.hep.wisc.edu.pub,${cvmfs_proxies}url=http://cvmfs01.hep.wisc.edu/cvmfs/cms.hep.wisc.edu
-    *.cern.ch:force_signing,pubkey=$PREFIX/cern.ch.pub,${cvmfs_proxies}url=http://cvmfs-stratum-one.cern.ch/opt/*;http://cernvmfs.gridpp.rl.ac.uk/opt/*;http://cvmfs.racf.bnl.gov/opt/*
+    cms.hep.wisc.edu:force_signing,pubkey=$PREFIX/cms.hep.wisc.edu.pub,url=http://cvmfs01.hep.wisc.edu/cvmfs/cms.hep.wisc.edu
+    <default-repositories>
   "
 
 fi
