@@ -28,6 +28,7 @@ extern "C" {
 
 extern int pfs_master_timeout;
 extern char pfs_temp_dir[];
+extern const char * pfs_cvmfs_repo_arg;
 
 static bool cvmfs_configured = false;
 static struct cvmfs_filesystem *cvmfs_filesystem_list = 0;
@@ -356,7 +357,10 @@ static void cvmfs_read_config()
 		allow_switching_cvmfs_repos = true;
 	}
 
-	const char *cvmfs_options = getenv("PARROT_CVMFS_REPO");
+	const char *cvmfs_options = pfs_cvmfs_repo_arg;
+	if( !cvmfs_options ) {
+		cvmfs_options = getenv("PARROT_CVMFS_REPO");
+	}
 	if( !cvmfs_options ) {
 		cvmfs_options = default_cvmfs_repo;
 	}
