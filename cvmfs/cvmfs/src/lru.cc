@@ -100,8 +100,10 @@ namespace lru {
          sqlite3_bind_text(stmt_touch, 2, &sha1_str[0], sha1_str.length(), SQLITE_STATIC);
          int result = sqlite3_step(stmt_touch);
          pmesg(D_LRU, "touching %s (%ld): %d", sha1_str.c_str(), seq-1, result);
-         errno = result;
-         assert(((result == SQLITE_DONE) || (result == SQLITE_OK)) && "LRU touch failed");
+         if ((result != SQLITE_DONE) && (result != SQLITE_OK)) {
+            logmsg("Failed to touch chunk %s, SQlite error %d", sha1_str.c_str(), result);
+            abort();
+         }
          sqlite3_reset(stmt_touch);
       
          pthread_mutex_unlock(&mutex);

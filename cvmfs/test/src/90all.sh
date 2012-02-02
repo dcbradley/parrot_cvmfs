@@ -4,7 +4,7 @@ cvmfs_test_name="All Cern repositories"
 cvmfs_run_test() {
   logfile=$1
 
-  echo "CVMFS_REPOSITORIES=alice,atlas,atlas-condb,atlas-nightlies,boss,cms,geant4,grid,hone,lcd,lhcb,na61,sft" > /etc/cvmfs/default.local || return 1
+  echo "CVMFS_REPOSITORIES=atlas,atlas-condb,atlas-nightlies,boss,cms,geant4,grid,hone,lcd,lhcb,na61,sft" > /etc/cvmfs/default.local || return 1
   echo "CVMFS_SERVER_URL=http://cvmfs-stratum-zero.cern.ch/opt/@org@" > /etc/cvmfs/domain.d/cern.ch.local
   echo "CVMFS_HTTP_PROXY=DIRECT" >> /etc/cvmfs/default.local
   service cvmfs restartclean >> $logfile 2>&1 || return 2

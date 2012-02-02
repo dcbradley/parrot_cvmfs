@@ -1,4 +1,7 @@
 2.0.8:
+  * Added header with the currently used proxy (X-CVMFS2-PROXY)
+  * Added a libcvmfs.a for use with Parrot.  The library is only built,
+    not installed
   * Fix chmod failure in cvmfs_sync.bin when catalog is created by
     another user  
 
