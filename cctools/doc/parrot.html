@@ -432,15 +432,15 @@ option1=value1,option2=value2,...
 
 <p>Literal spaces, tabs, newlines, asterisks, equal signs, or commas
 in the options must be proceeded by a backslash to avoid being
-interpreted as punctuation.  The possible options are listed in the
-table below.  The <tt>url</tt> option is required and has no default.
-The <tt>proxies</tt> option is required and defaults to the proxy used
-by parrot, if any.
+interpreted as delimiters.  If the same option is specified more than
+once, the last value takes precedence.  The possible options are
+listed in the table below.  The <tt>url</tt> option is required and
+has no default.  The <tt>proxies</tt> option is required and defaults
+to the proxy used by parrot, if any.
 
 <p>
 <table>
 <tr><td><b>url=URL</b> <td>The URL of the CernVM-FS server(s): 'url1;url2;...'
-<tr><td><b>allow_unsigned</b>         <td>Accept unsigned catalogs (allows man-in-the-middle attacks)
 <tr><td><b>proxies=HTTP_PROXIES</b>   <td>Set the HTTP proxy list, such as 'proxy1|proxy2'; default is given by -P option (HTTP_PROXY)
 <tr><td>                              <td>Proxies separated by '|' are randomly chosen for load balancing.
                                           Groups of proxies separated by ';' may be specified for failover.
@@ -449,10 +449,12 @@ by parrot, if any.
 <tr><td><b>timeout=SECONDS</b> <td>Timeout for network operations; default is given by -T option (PARROT_TIMEOUT)
 <tr><td><b>timeout_direct=SECONDS</b> <td>Timeout in for network operations without proxy; default is given by -T option (PARROT_TIMEOUT)
 <tr><td><b>max_ttl=MINUTES</b>        <td>Maximum TTL for file catalogs; default: take from catalog
+<tr><td><b>allow_unsigned</b>         <td>Accept unsigned catalogs (allows man-in-the-middle attacks)
 <tr><td><b>whitelist=URL</b>          <td>HTTP location of trusted catalog certificates (defaults is /.cvmfswhitelist)
 <tr><td><b>pubkey=PEMFILE</b>         <td>Public RSA key that is used to verify the whitelist signature.
 <tr><td><b>rebuild_cachedb</b>        <td>Force rebuilding the quota cache db from cache directory
 <tr><td><b>quota_limit=MB</b>         <td>Limit size of cache. -1 (the default) means unlimited.
+<tr><td>                              <td>If not -1, files larger than quota_limit-quota_threshold will not be readable.
 <tr><td><b>quota_threshold=MB</b>     <td>Cleanup cache until size is <= threshold
 <tr><td><b>deep_mount=prefix</b>      <td>Path prefix if a repository is mounted on a nested catalog
 <tr><td><b>repo_name=NAME</b>         <td>Unique name of the mounted repository; default is the name used for this configuration entry
@@ -463,12 +465,16 @@ by parrot, if any.
 <p>Setting the CVMFS configuration overrides the default
 configuration.  If it is desired to configure additional repositories
 but still retain the default repositories, the configuration entry
-<tt>&lt;default-repositories&gt;</tt> may be put in the configuration
-string.  Example:
+<nobr><tt>&lt;default-repositories&gt;</tt></nobr> may be put in the
+configuration string.  Example:
 
 <pre>
 parrot_run -r '&lt;default-repositories&gt; my.repo:url=http://cvmfs.server.edu/cvmfs/my.repo.edu' ...
 </pre>
+
+<p>The configuration of the default repositories may be modified by
+specifying additional options using the syntax
+<nobr><tt>&lt;default-repositories&gt;:option1=value1,option2=value2</tt></nobr>.
 
 <p>Currently, there is a limitation of one active CVMFS repository per
 parrot session.  Attempts to access a second CVMFS repository in the
