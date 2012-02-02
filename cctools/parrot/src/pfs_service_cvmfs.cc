@@ -435,7 +435,18 @@ static void cvmfs_read_config()
 			// in case user wants to add to it
 			std::string new_options = default_cvmfs_repo;
 			new_options += " ";
-			new_options += cvmfs_options;
+			if( !options.empty() ) {
+				// user specified some additional options to be applied to the default repos
+				int i = new_options.length();
+				while( i>1 ) {
+					i--;
+					if( isspace(new_options[i]) && !isspace(new_options[i-1]) ) {
+						new_options.insert(i,options);
+						new_options.insert(i,",");
+					}
+				}
+			}
+			new_options += cvmfs_options; // append remaining unparsed contents of config string
 			cvmfs_options_buf = new_options;
 			cvmfs_options = new_options.c_str();
 		}
