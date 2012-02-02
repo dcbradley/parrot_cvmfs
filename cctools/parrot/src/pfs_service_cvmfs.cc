@@ -37,7 +37,7 @@ static bool allow_switching_cvmfs_repos = false;
 
 #define CERN_KEY_PLACEHOLDER "<BUILTIN-cern.ch.pub>"
 
-static const char *default_cvmfs_repo = "*.cern.ch:force_signing,pubkey=" CERN_KEY_PLACEHOLDER ",url=http://cvmfs-stratum-one.cern.ch/opt/*;http://cernvmfs.gridpp.rl.ac.uk/opt/*;http://cvmfs.racf.bnl.gov/opt/*";
+static const char *default_cvmfs_repo = "*.cern.ch:pubkey=" CERN_KEY_PLACEHOLDER ",url=http://cvmfs-stratum-one.cern.ch/opt/*;http://cernvmfs.gridpp.rl.ac.uk/opt/*;http://cvmfs.racf.bnl.gov/opt/*";
 
 static const char *cern_key_text = 
 "-----BEGIN PUBLIC KEY-----\n\
@@ -343,10 +343,10 @@ cvmfs_filesystem *cvmfs_filesystem::createMatch(char const *repo_name) const
  * escaped with a backslash.
  *
  * Example for /cvmfs/cms.cern.ch:
- * cms.cern.ch:force_signing,pubkey=/path/to/cern.ch.pub,url=http://cvmfs-stratum-one.cern.ch/opt/cms
+ * cms.cern.ch:pubkey=/path/to/cern.ch.pub,url=http://cvmfs-stratum-one.cern.ch/opt/cms
  *
  * Example with wildcard (using <*> to avoid compiler warning about nested comment):
- * *.cern.ch:force_signing,pubkey=/path/to/cern.ch.pub,url=http://cvmfs-stratum-one.cern.ch/opt/<*>
+ * *.cern.ch:pubkey=/path/to/cern.ch.pub,url=http://cvmfs-stratum-one.cern.ch/opt/<*>
  */
 static void cvmfs_read_config()
 {

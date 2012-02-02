@@ -14,7 +14,7 @@ else
   fi
 
   export PARROT_CVMFS_REPO="
-    cms.hep.wisc.edu:force_signing,pubkey=$PREFIX/cms.hep.wisc.edu.pub,url=http://cvmfs01.hep.wisc.edu/cvmfs/cms.hep.wisc.edu
+    cms.hep.wisc.edu:pubkey=$PREFIX/cms.hep.wisc.edu.pub,url=http://cvmfs01.hep.wisc.edu/cvmfs/cms.hep.wisc.edu
     <default-repositories>
   "
 
