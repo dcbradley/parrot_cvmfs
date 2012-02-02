@@ -93,9 +93,9 @@ struct cvmfs_opts {
    }
 
    int set_option(char const *name, char const *value, unsigned long *var) {
-      unsigned v = 0;
+      unsigned long v = 0;
       int end = 0;
-      int rc = sscanf(value,"%ul%n",&v,&end);
+      int rc = sscanf(value,"%lu%n",&v,&end);
       if( rc != 1 || value[end] != '\0' ) {
          fprintf(stderr,"Invalid unsigned long integer value for %s=%s\n",name,value);
          return -1;
