@@ -10,7 +10,7 @@ if ! [ -f $PREFIX/cms.hep.wisc.edu.pub ]; then
 else
 
   if [ "$HTTP_PROXY" = "" ]; then
-    export HTTP_PROXY="frontier01.hep.wisc.edu:3128;fronteir02.hep.wisc.edu:3128"
+    export HTTP_PROXY="frontier01.hep.wisc.edu:3128|frontier02.hep.wisc.edu:3128"
   fi
 
   export PARROT_CVMFS_REPO="
