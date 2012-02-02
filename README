@@ -11,7 +11,7 @@ subversion repositories and was copied into the 'upstream' branch.
 The following versions are currently used:
 
 cvmfs trunk r3169
-cctools trunk r1660
+cctools trunk r1691
 
 To see the development that has been done, compare the master
 branch to the upstream branch:
