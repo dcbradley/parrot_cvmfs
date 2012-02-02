@@ -49,7 +49,7 @@ struct cvmfs_opts {
    string   blacklist;
    string   repo_name;
    string   mountpoint;
-   bool     force_signing;
+   bool     allow_unsigned;
    bool     rebuild_cachedb;
    int      nofiles;
    int      syslog_level;
@@ -64,7 +64,7 @@ struct cvmfs_opts {
       whitelist("/.cvmfswhitelist"),
       pubkey("/etc/cvmfs/keys/cern.ch.pub"),
       blacklist("/etc/cvmfs/blacklist"),
-      force_signing(false),
+      allow_unsigned(false),
       rebuild_cachedb(false),
       nofiles(0),
       syslog_level(3),
@@ -131,7 +131,7 @@ struct cvmfs_opts {
       CVMFS_OPT(cachedir);
       CVMFS_OPT(proxies);
       CVMFS_OPT(tracefile);
-      CVMFS_OPT(force_signing);
+      CVMFS_OPT(allow_unsigned);
       CVMFS_OPT(whitelist);
       CVMFS_OPT(pubkey);
       CVMFS_OPT(logfile);
@@ -227,7 +227,7 @@ struct cvmfs_opts {
             " tracefile=FILE          Trace FUSE opaerations into FILE\n"
             " whitelist=URL           HTTP location of trusted catalog certificates (defaults is /.cvmfswhitelist)\n"
             " pubkey=PEMFILE          Public RSA key that is used to verify the whitelist signature.\n"
-            " force_signing           Except only signed catalogs\n"
+            " allow_unsigned          Accept unsigned catalogs (allows man-in-the-middle attacks)\n"
             " rebuild_cachedb         Force rebuilding the quota cache db from cache directory\n"
             " quota_limit=MB          Limit size of data chunks in cache. -1 Means unlimited.\n"
             " quota_threshold=MB      Cleanup until size is <= threshold\n"
@@ -512,7 +512,7 @@ int cvmfs_init(char const *options)
       getuid(),
       getgid(),
       cvmfs_opts.max_ttl,
-      cvmfs_opts.force_signing,
+      !cvmfs_opts.allow_unsigned,
       cvmfs_opts.timeout,
       cvmfs_opts.timeout_direct,
       cvmfs_opts.syslog_level,
