@@ -178,6 +178,15 @@ int link_putvfstring(struct link *link, const char *fmt, time_t stoptime, va_lis
 */
 int link_usleep(struct link *link, int usec, int reading, int writing);
 
+/** Block until a link is readable or writable.
+@param link The link to wait on.
+@param stoptime The time at which to abort.
+@param reading Wait for the link to become readable.
+@param writing Wait for the link to become writable.
+@return One if the link becomes readable or writable before the timeout expires, zero otherwise.
+*/
+int link_sleep(struct link *link, time_t stoptime, int reading, int writing);
+
 /** Close a connection.
 @param link The connection to close.
 */
@@ -222,6 +231,8 @@ int link_readline(struct link *link, char *line, size_t length, time_t stoptime)
 @return The integer file descriptor of the link.
 */
 int link_fd(struct link *link);
+
+int link_keepalive(struct link *link, int onoff);
 
 int link_nonblocking(struct link *link, int onoff);
 

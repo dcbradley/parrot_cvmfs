@@ -16,7 +16,6 @@ See the file COPYING for details.
 #include "pfs_file.h"
 #include "pfs_process.h"
 #include "pfs_file_cache.h"
-#include "pfs_file_gzip.h"
 
 extern "C" {
 #include "debug.h"
@@ -50,7 +49,6 @@ extern "C" {
 extern int pfs_force_stream;
 extern int pfs_force_sync;
 extern int pfs_follow_symlinks;
-extern int pfs_auto_gzip;
 extern int pfs_enable_small_file_optimizations;
 
 extern const char * pfs_initial_working_directory;
@@ -305,17 +303,26 @@ pfs_file * pfs_table::open_object( const char *lname, int flags, mode_t mode, in
 	pfs_name pname;
 	pfs_file *file=0;
 	int force_stream = pfs_force_stream;
-	int allow_gzip = 1;
 
-        /* Yes, this is a hack, but it is quite a valuable one. */
-        /* No need to make local copies if we are pushing files around. */
+	// Hack: Disable caching when doing plain old file copies.
+
         if(
                 !strcmp(pfs_current->name,"cp") ||
                 !strcmp(string_back(pfs_current->name,3),"/cp")
         ) {
                 force_stream = 1;
         }
-                                                                                                  
+
+	// Hack: Almost all calls to open a directory are routed
+	// through opendir(), which sets O_DIRECTORY.  In a few
+	// cases, such as the use of openat in pwd, the flag
+	// is not set, set we detect it here.
+
+	const char *basename = string_basename(lname);
+	if(!strcmp(basename,".") || !strcmp(basename,"..")) {
+		flags |= O_DIRECTORY;
+	}
+
 	if(resolve_name(lname,&pname)) {
 		if(flags&O_DIRECTORY) {
 			file = pname.service->getdir(&pname);
@@ -324,7 +331,6 @@ pfs_file * pfs_table::open_object( const char *lname, int flags, mode_t mode, in
 		} else if(pname.service->is_seekable()) {
 			if(force_cache) {
 				file = pfs_cache_open(&pname,flags,mode);
-				allow_gzip = 0;
 			} else {
 				file = pname.service->open(&pname,flags,mode);
 			}
@@ -333,17 +339,10 @@ pfs_file * pfs_table::open_object( const char *lname, int flags, mode_t mode, in
 				file = pname.service->open(&pname,flags,mode);
 			} else {
 				file = pfs_cache_open(&pname,flags,mode);
-				allow_gzip = 0;
 			}
 		}
 	} else {
 		file = 0;
-	}
-
-	if(file && pfs_auto_gzip && allow_gzip) {
-		if(string_match("*.gz",pname.logical_name)) {
-			file = pfs_gzip_open(file,flags,mode);
-		}
 	}
 
 	return file;

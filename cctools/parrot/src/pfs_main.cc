@@ -16,7 +16,7 @@ extern "C" {
 #include "tracer.h"
 #include "stringtools.h"
 #include "auth_all.h"
-#include "xmalloc.h"
+#include "xxmalloc.h"
 #include "create_dir.h"
 #include "file_cache.h"
 #include "md5.h"
@@ -58,7 +58,6 @@ int pfs_follow_symlinks = 1;
 int pfs_session_cache = 0;
 int pfs_use_helper = 1;
 int pfs_checksum_files = 1;
-int pfs_auto_gzip = 0;
 int pfs_write_rval = 0;
 const char *pfs_write_rval_file = "parrot.rval";
 int pfs_enable_small_file_optimizations = 1;
@@ -80,6 +79,8 @@ const char * pfs_username = 0;
 INT64_T pfs_syscall_count = 0;
 INT64_T pfs_read_count = 0;
 INT64_T pfs_write_count = 0;
+
+const char * pfs_cvmfs_repo_arg = 0;
 
 /*
 This process at the very top of the traced tree
@@ -184,6 +185,7 @@ static void show_use( const char *cmd )
 	printf("  -O <bytes> Rotate debug files of this size.     (PARROT_DEBUG_FILE_SIZE)\n");
 	printf("  -p <hst:p> Use this proxy server for HTTP requests.         (HTTP_PROXY)\n");
 	printf("  -Q         Inhibit catalog queries to list /chirp.\n");
+	printf("  -r <repos> CVMFS repositories to enable.             (PARROT_CVMFS_REPO)\n");
 	printf("  -R <cksum> Enforce this root filesystem checksum, where available.\n");
 	printf("  -s         Use streaming protocols without caching.(PARROT_FORCE_STREAM)\n");
 	printf("  -S         Enable whole session caching for all protocols.\n");
@@ -479,7 +481,7 @@ int main( int argc, char *argv[] )
 
 	s = getenv("PARROT_DEBUG_FLAGS");
 	if(s) {
-		char *x = xstrdup(s);
+		char *x = xxstrdup(s);
 		int nargs;
 		char **args;
 		if(string_split(x,&nargs,&args)) {
@@ -492,7 +494,7 @@ int main( int argc, char *argv[] )
 
 	s = getenv("PARROT_CHIRP_AUTH");
 	if(s) {
-		char *x = xstrdup(s);
+		char *x = xxstrdup(s);
 		int nargs;
 		char **args;
 		if(string_split(x,&nargs,&args)) {
@@ -506,7 +508,7 @@ int main( int argc, char *argv[] )
 
 	s = getenv("PARROT_USER_PASS");
 	if(s) {
-		char *x = xstrdup(s);
+		char *x = xxstrdup(s);
 		int nargs;
 		char **args;
 		if(string_split(x,&nargs,&args)) {
@@ -516,7 +518,7 @@ int main( int argc, char *argv[] )
 
 	sprintf(pfs_temp_dir,"/tmp/parrot.%d",getuid());
 
-	while((c=getopt(argc,argv,"+hA:a:b:B:c:Cd:DE:FfG:Hi:kKl:m:M:N:o:O:p:QR:sSt:T:U:u:vw:WYZ"))!=(char)-1) {
+	while((c=getopt(argc,argv,"+hA:a:b:B:c:Cd:DE:FfG:Hi:kKl:m:M:N:o:O:p:Qr:R:sSt:T:U:u:vw:WY"))!=(char)-1) {
 		switch(c) {
 		case 'a':
 			if(!auth_register_byname(optarg)) {
@@ -592,6 +594,9 @@ int main( int argc, char *argv[] )
 		case 'Q':
 			chirp_global_inhibit_catalog(1);
 			break;
+		case 'r':
+			pfs_cvmfs_repo_arg = optarg;
+			break;
 		case 'R':
 			pfs_root_checksum = optarg;
 			pfs_checksum_files = 1;
@@ -627,9 +632,6 @@ int main( int argc, char *argv[] )
 		case 'W':
 			pfs_syscall_totals32 = (int*) calloc(SYSCALL32_MAX,sizeof(int));
 			pfs_syscall_totals64 = (int*) calloc(SYSCALL64_MAX,sizeof(int));
-			break;
-		case 'Z':
-			pfs_auto_gzip = 1;
 			break;
 		default:
 			show_use(argv[0]);
