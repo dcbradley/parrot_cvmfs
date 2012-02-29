@@ -3,6 +3,7 @@
 #include "debug.h"
 #include "process.h"
 #include "macros.h"
+#include "stringtools.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -28,35 +29,48 @@ batch_job_id_t batch_job_submit_simple_local(struct batch_queue *q, const char *
 		debug(D_DEBUG, "couldn't create new process: %s\n", strerror(errno));
 		return -1;
 	} else {
+		/** The following code works but would duplicates the current process because of the system() function.
 		int result = system(cmd);
 		if(WIFEXITED(result)) {
 			_exit(WEXITSTATUS(result));
 		} else {
 			_exit(1);
-		}
-	}
+		}*/
 
+		/** A note from "man system 3" as of Jan 2012:
+		 * Do not use system() from a program with set-user-ID or set-group-ID
+		 * privileges, because strange values for some environment variables
+		 * might be used to subvert system integrity. Use the exec(3) family of
+		 * functions instead, but not execlp(3) or execvp(3). system() will
+		 * not, in fact, work properly from programs with set-user-ID or
+		 * set-group-ID privileges on systems on which /bin/sh is bash version
+		 * 2, since bash 2 drops privileges on startup. (Debian uses a modified
+		 * bash which does not do this when invoked as sh.) 
+		 */
+		execlp("sh", "sh", "-c", cmd, (char *) 0);
+		_exit(127);	// Failed to execute the cmd.
+	}
+	return -1;
 }
 
-batch_job_id_t batch_job_submit_local(struct batch_queue *q, const char *cmd, const char *args, const char *infile, const char *outfile, const char *errfile, const char *extra_input_files, const char *extra_output_files)
+batch_job_id_t batch_job_submit_local(struct batch_queue * q, const char *cmd, const char *args, const char *infile, const char *outfile, const char *errfile, const char *extra_input_files, const char *extra_output_files)
 {
-	char line[BATCH_JOB_LINE_MAX];
-
-	if(!cmd)
-		return -1;
-
-	if(!args)
+	if(cmd == NULL)
+		cmd = "/bin/false";
+	if(args == NULL)
 		args = "";
-	if(!infile)
+	if(infile == NULL)
 		infile = "/dev/null";
-	if(!outfile)
+	if(outfile == NULL)
 		outfile = "/dev/null";
-	if(!errfile)
+	if(errfile == NULL)
 		errfile = "/dev/null";
 
-	sprintf(line, "%s %s <%s >%s 2>%s", cmd, args, infile, outfile, errfile);
+	char *command = string_format("%s %s <%s >%s 2>%s", cmd, args, infile, outfile, errfile);
 
-	return batch_job_submit_simple_local(q, line, extra_input_files, extra_output_files);
+	batch_job_id_t status = batch_job_submit_simple_local(q, command, extra_input_files, extra_output_files);
+	free(command);
+	return status;
 }
 
 batch_job_id_t batch_job_wait_local(struct batch_queue * q, struct batch_job_info * info_out, time_t stoptime)
@@ -118,4 +132,3 @@ int batch_job_remove_local(struct batch_queue *q, batch_job_id_t jobid)
 		return 0;
 	}
 }
-
