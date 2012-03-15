@@ -954,10 +954,15 @@ int main(int argc, char **argv) {
          case 'I':
             switch (object) {
                case 'R':
+                  rem_path(path2, fil_add);
+                  rem_path(path2, sym_add);
                   reg_add.insert(path2);
                   replace_candidate.insert(path2);
                   break;
                case 'L':
+                  rem_path(path2, fil_add);
+                  rem_path(path2, reg_add);
+                  rem_path(path2, reg_touch);
                   sym_add.insert(path2);
                   replace_candidate.insert(path2);
                   break;

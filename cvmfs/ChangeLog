@@ -1,7 +1,29 @@
-2.0.8:
-  * Added header with the currently used proxy (X-CVMFS2-PROXY)
+2.0.12:
+  * Fixed synchronization bug in server tools when a symlink
+    and a regular file are created an one is renamed to the other
+
+2.0.11:
+  * Fixed installing keys in make install
+  * Raised maximum number of open files to 64k
+  * RPM builds on SL6, Fedora 16
+  * Fixed missing include for SL6
+  * Fixed message about missing /sbin/umount.cvmfs in cvmfs_config
+
+2.0.10:
+  * Opportunistically rebuild cache database when a precious crash
+    has been detecte
+  * Added new CERN IT master keys
+  * Fixed a race condition when quickly unmounting and mounting   
+
+2.0.9:
+  * Fixed O_DIRECT caused bugs when loading cached certificates
+  * New cvmfs-talk command "reset error counters"
+  * Switched to c-ares resolver
+  * Moved X-CVMFS2 to "user-agent" and included proxy server
   * Added a libcvmfs.a for use with Parrot.  The library is only built,
     not installed
+  
+2.0.8:
   * Fix chmod failure in cvmfs_sync.bin when catalog is created by
     another user  
 

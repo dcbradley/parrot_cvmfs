@@ -166,11 +166,8 @@ namespace cache {
     */
    int open(const hash::t_sha1 &id) {
       const string lpath = cached_name(id);
-#ifdef FUSE_CLIENT
-     int result = ::open(lpath.c_str(), O_RDONLY | O_DIRECT | O_NOATIME, 0);
-#else
-     int result = ::open(lpath.c_str(), O_RDONLY | O_NOATIME, 0);
-#endif
+      int result = ::open(lpath.c_str(), O_RDONLY, 0);
+      posix_fadvise(result, 0, 0, POSIX_FADV_RANDOM | POSIX_FADV_NOREUSE);
 
       if (result >= 0) pmesg(D_CACHE, "hit %s", lpath.c_str());
       else pmesg(D_CACHE, "miss %s (%d)", lpath.c_str(), result);
@@ -404,11 +401,9 @@ namespace cache {
 
          pmesg(D_CACHE, "trying to commit");
          fclose(f);
-#ifdef FUSE_CLIENT
-        fd_return = ::open(txn.c_str(), O_RDONLY | O_DIRECT | O_NOATIME, 0);
-#else
-        fd_return = ::open(txn.c_str(), O_RDONLY | O_NOATIME, 0);
-#endif
+         fd_return = ::open(txn.c_str(), O_RDONLY, 0);
+         posix_fadvise(fd_return, 0, 0, POSIX_FADV_RANDOM | POSIX_FADV_NOREUSE);
+
          if (fd_return < 0) {
             result = -errno;
             return result;
@@ -471,6 +466,7 @@ namespace cache {
 
       ssize_t retval = read(fd, *buffer, *size);
       if ((retval < 0) || ((size_t)retval != *size)) {
+        pmesg(D_CACHE, "Ooops, retval %lu, %ld, %d, size %ld", retval, retval, errno, *size);
          close(fd);
          free(*buffer);
          *buffer = NULL;

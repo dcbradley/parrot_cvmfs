@@ -15,6 +15,7 @@
 
 #include <string>
 #include <errno.h>
+#include <cstdlib>
 #include <stddef.h>
 #include <sys/stat.h>
 
@@ -25,6 +26,7 @@
 extern "C" {
    #include "debug.h"
    #include "log.h"
+   #include "smalloc.h"
 }
 
 using namespace std;
@@ -105,7 +107,7 @@ struct cvmfs_opts {
    }
 
    int set_option(char const *name, char const *value, int *var) {
-      unsigned v = 0;
+      int v = 0;
       int end = 0;
       int rc = sscanf(value,"%d%n",&v,&end);
       if( rc != 1 || value[end] != '\0' ) {
@@ -203,7 +205,7 @@ struct cvmfs_opts {
       return 0;
    }
 
-   /** 
+   /**
     * Display the usage message.
     */
    static void usage() {
@@ -318,7 +320,7 @@ static int expand_path(char const *path,string &expanded_path,int depth=0)
 
    // expand symbolic link
 
-   char *ln_buf = (char *)malloc(st.st_size+2);
+   char *ln_buf = (char *)smalloc(st.st_size+2);
    if( !ln_buf ) {
       errno = ENOMEM;
       return -1;
@@ -428,7 +430,7 @@ int cvmfs_readlink(const char *path, char *buf, size_t size) {
 }
 
 int cvmfs_stat(const char *path,struct stat *st)
-{ 
+{
    string lpath;
    int rc;
    rc = expand_path(path,lpath);
@@ -446,7 +448,7 @@ int cvmfs_stat(const char *path,struct stat *st)
 }
 
 int cvmfs_lstat(const char *path,struct stat *st)
-{ 
+{
    string lpath;
    int rc;
    rc = expand_ppath(path,lpath);

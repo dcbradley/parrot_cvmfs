@@ -1,6 +1,7 @@
 #!/bin/sh
 
 CURL_VERSION=7.21.3
+CARES_VERSION=1.7.5
 FUSE_VERSION=2.8.4
 REDIRFS_VERSION=SVN-671
 JEMALLOC_VERSION=2.2.1
@@ -10,6 +11,12 @@ cd libcurl
 tar xfz curl-${CURL_VERSION}.tar.gz 
 mv curl-${CURL_VERSION}/* src/
 rm -rf curl-${CURL_VERSION}
+cd ..
+
+cd c-ares
+tar xfz c-ares-${CARES_VERSION}.tar.gz
+mv c-ares-${CARES_VERSION}/* src/
+rm -rf c-ares-${CARES_VERSION}
 cd ..
 
 cd libfuse

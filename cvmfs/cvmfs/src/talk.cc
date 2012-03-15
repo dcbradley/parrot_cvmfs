@@ -3,7 +3,7 @@
  * \namespace talk
  *
  * This implements a socket-interface to cvmfs.  This way commands can be send
- * to cvmfs.  When cvmfs is running, the socket /var/cache/cvmfs2/$INSTANCE/cvmfs_io 
+ * to cvmfs.  When cvmfs is running, the socket /var/cache/cvmfs2/$INSTANCE/cvmfs_io
  * is available for command input and reply messages, resp.
  *
  * Cvmfs comes with the cvmfs-talk script, that handles writing and reading the
@@ -14,7 +14,7 @@
  * Developed by Jakob Blomer 2009 at CERN
  * jakob.blomer@cern.ch
  */
- 
+
 #include "config.h"
 #include "talk.h"
 
@@ -44,7 +44,7 @@ extern "C" {
    #include "http_curl.h"
    #include "debug.h"
    #include "log.h"
-   #include "sqlite3-duplex.h"   
+   #include "sqlite3-duplex.h"
 }
 
 using namespace std;
@@ -62,10 +62,10 @@ namespace talk {
    static void answer(const int con_fd, const string &msg) {
       (void)send(con_fd, &msg[0], msg.length(), MSG_NOSIGNAL);
    }
-   
+
    static void *tf_talk(void *data __attribute__((unused))) {
       pmesg(D_TALK, "talk thread started");
-      
+
       struct sockaddr_un remote;
       socklen_t s = sizeof(remote);
       int con_fd = -1;
@@ -77,12 +77,12 @@ namespace talk {
          if ((con_fd = accept(socket_fd, (struct sockaddr *)&remote, &s)) < 0) {
             break;
          }
-         
+
          char buf[256];
          if (recv(con_fd, buf, 256, 0) > 0) {
             const string line = string(buf);
             //pmesg(D_TALK, "received command %s", line.c_str());
-            
+
             if (line == "flush") {
                Tracer::flush();
                answer(con_fd, "OK\n");
@@ -234,7 +234,7 @@ namespace talk {
                   cvmfs::set_max_ttl(max_ttl);
                   answer(con_fd, "OK\n");
                }
-            } 
+            }
             else if (line == "host info") {
                int num;
                int current;
@@ -247,7 +247,7 @@ namespace talk {
                   if (rtt[i] == -1) info << "unprobed";
                   else if (rtt[i] == -2) info << "host down";
                   else info << rtt[i] << " ms";
-                  info << ")" << endl; 
+                  info << ")" << endl;
                }
                info << "Active host " << current << ": " << hosts[current] << endl;
                free(rtt);
@@ -281,7 +281,7 @@ namespace talk {
                char **proxies;
                int *lb_starts;
                curl_get_proxy_info(&num, &current, &current_lb, &proxies, &num_lb, &lb_starts);
-               
+
                ostringstream info;
                if (num) {
                   int this_lbgroup = 0;
@@ -293,20 +293,20 @@ namespace talk {
                      } else {
                         info << ", ";
                      }
-                     
+
                      info << proxies[i];
                      free(proxies[i]);
                   }
                   info << "\n" << "Active proxy: [" << current_lb << "] "
                        << string(current) << "\n";
-               
+
                   free(lb_starts);
                   free(proxies);
                   free(current);
                } else {
                   info << "No proxies defined\n";
                }
-               
+
                answer(con_fd, info.str());
             }
             else if (line == "proxy rebalance") {
@@ -336,7 +336,7 @@ namespace talk {
                info << "Timeout with proxy: ";
                if (timeout) info << timeout << "s\n";
                else info << "no timeout\n";
-               info << "Timeout without proxy: "; 
+               info << "Timeout without proxy: ";
                if (timeout_direct) info << timeout_direct << "s\n";
                else info << "no timeout\n";
                answer(con_fd, info.str());
@@ -365,7 +365,7 @@ namespace talk {
                   result += (expires[i] == 0) ? "n/a" : localtime_ascii(expires[i], true);
                   result += "\n";
                }
-                                                                           
+
                answer(con_fd, result);
             } else if (line == "sqlite memory") {
                ostringstream result;
@@ -381,59 +381,63 @@ namespace talk {
                int cache_misses = 0;
                int cert_hits = 0;
                int cert_misses = 0;
-               
+
                catalog::lock();
                lru::lock();
-               
+
                result << "File catalog memcache " << cvmfs::catalog_cache_memusage_bytes()/1024 << " KB" << endl;
-               cvmfs::catalog_cache_memusage_slots(pcache, ncache, acache, 
+               cvmfs::catalog_cache_memusage_slots(pcache, ncache, acache,
                                                    cache_inserts, cache_replaces, cache_cleans, cache_hits, cache_misses,
                                                    cert_hits, cert_misses);
-               result << "File catalog memcache slots " 
-                      << pcache << " positive, " << ncache << " negative / " << acache << " slots, " 
+               result << "File catalog memcache slots "
+                      << pcache << " positive, " << ncache << " negative / " << acache << " slots, "
                       << cache_inserts << " inserts, " << cache_replaces << " replaces (not measured), " << cache_cleans << " cleans, "
                       << cache_hits << " hits, " << cache_misses << " misses" << endl
                       << "certificate disk cache hits/misses " << cert_hits << "/" << cert_misses << endl;
-               
-               
+
+
                sqlite3_status(SQLITE_STATUS_MALLOC_COUNT, &current, &highwater, 0);
                result << "Number of allocations " << current << endl;
-               
+
                sqlite3_status(SQLITE_STATUS_MEMORY_USED, &current, &highwater, 0);
                result << "General purpose allocator " << current/1024 << " KB / "
                << highwater/1024 << " KB" << endl;
-               
+
                sqlite3_status(SQLITE_STATUS_MALLOC_SIZE, &current, &highwater, 0);
                result << "Largest malloc " << highwater << " Bytes" << endl;
-               
+
                sqlite3_status(SQLITE_STATUS_PAGECACHE_USED, &current, &highwater, 0);
                result << "Page cache allocations " << current << " / " << highwater << endl;
-               
+
                sqlite3_status(SQLITE_STATUS_PAGECACHE_OVERFLOW, &current, &highwater, 0);
                result << "Page cache overflows " << current/1024 << " KB / " << highwater/1024 << " KB" << endl;
-               
+
                sqlite3_status(SQLITE_STATUS_PAGECACHE_SIZE, &current, &highwater, 0);
                result << "Largest page cache allocation " << highwater << " Bytes" << endl;
-               
+
                sqlite3_status(SQLITE_STATUS_SCRATCH_USED, &current, &highwater, 0);
                result << "Scratch allocations " << current << " / " << highwater << endl;
-               
+
                sqlite3_status(SQLITE_STATUS_SCRATCH_OVERFLOW, &current, &highwater, 0);
                result << "Scratch overflows " << current << " / " << highwater << endl;
-               
+
                sqlite3_status(SQLITE_STATUS_SCRATCH_SIZE, &current, &highwater, 0);
                result << "Largest scratch allocation " << highwater/1024 << " KB" << endl;
-               
+
                result << catalog::get_db_memory_usage();
                result << lru::get_memory_usage();
-               
+
                lru::unlock();
                catalog::unlock();
-               
+
                answer(con_fd, result.str());
             }
             else if (line == "catalog tree") {
                answer(con_fd, catalog_tree::show_tree());
+            }
+            else if (line == "reset error counters") {
+               cvmfs::reset_error_counters();
+               answer(con_fd, "OK\n");
             }
             else if (line == "pid") {
                ostringstream spid;
@@ -450,17 +454,17 @@ namespace talk {
             }
          }
       }
-      
+
       return NULL;
    }
 
-   
+
    /**
     * Init the socket.
     */
-   bool init(string cachedir) {   
+   bool init(string cachedir) {
       talk::cachedir = cachedir;
-      
+
       struct sockaddr_un sock_addr;
       socket_path = cachedir + "/cvmfs_io";
       if (socket_path.length() >= sizeof(sock_addr.sun_path))
@@ -468,24 +472,24 @@ namespace talk {
 
       if ((socket_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
          return false;
-         
+
       if (fchmod(socket_fd, 0660) != 0)
          return false;
-      
+
       sock_addr.sun_family = AF_UNIX;
       strncpy(sock_addr.sun_path, socket_path.c_str(), sizeof(sock_addr.sun_path));
-      
-      if (bind(socket_fd, (struct sockaddr *)&sock_addr, 
+
+      if (bind(socket_fd, (struct sockaddr *)&sock_addr,
           sizeof(sock_addr.sun_family) + sizeof(sock_addr.sun_path)) < 0)
       {
          if ((errno == EADDRINUSE) && (unlink(socket_path.c_str()) == 0)) {
             /* second try, perhaps the file was left over */
-            if (bind(socket_fd, (struct sockaddr *)&sock_addr, 
-                     sizeof(sock_addr.sun_family) + sizeof(sock_addr.sun_path)) < 0) 
+            if (bind(socket_fd, (struct sockaddr *)&sock_addr,
+                     sizeof(sock_addr.sun_family) + sizeof(sock_addr.sun_path)) < 0)
             {
                return false;
             }
-            logmsg("There was already a cvmfs_io file in cache directory.  Did we have a crash shutdown?");
+            //logmsg("There was already a cvmfs_io file in cache directory.  Did we have a crash shutdown?");
          } else {
             return false;
          }
@@ -493,13 +497,13 @@ namespace talk {
 
       if (listen(socket_fd, 1) < -1)
          return false;
-         
+
       pmesg(D_TALK, "socket created at %s", socket_path.c_str());
-         
+
       return true;
    }
-   
-   
+
+
    /**
     * Spawns the socket-dealing thread
     */
@@ -510,7 +514,7 @@ namespace talk {
       spawned = true;
    }
 
-   
+
    /**
     * Terminates command-listener thread.  Removes socket.
     */
@@ -520,7 +524,7 @@ namespace talk {
       if (result != 0) {
          logmsg("Could not remove cvmfs_io socket from cache directory.");
       }
-      
+
       shutdown(socket_fd, SHUT_RDWR);
       close(socket_fd);
       if (spawned) pthread_join(thread_cvmfs_talk, NULL);

@@ -14,4 +14,6 @@ install-exec-hook:
 	install -c -m 0644 default.conf "$(DESTDIR)/etc/cvmfs/default.conf"
 	install -c -m 0644 domain.d/cern.ch.conf "$(DESTDIR)/etc/cvmfs/domain.d/cern.ch.conf"
 	install -c -m 0444 keys/cern.ch.pub "$(DESTDIR)/etc/cvmfs/keys/cern.ch.pub"
+	install -c -m 0444 keys/cern-it1.cern.ch.pub "$(DESTDIR)/etc/cvmfs/keys/cern-it1.cern.ch.pub"
+	install -c -m 0444 keys/cern-it2.cern.ch.pub "$(DESTDIR)/etc/cvmfs/keys/cern-it2.cern.ch.pub"
 endif

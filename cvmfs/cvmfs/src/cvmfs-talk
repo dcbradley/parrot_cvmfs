@@ -54,6 +54,7 @@ sub usage {
     print "  timeout info           gets the network timeouts              \n";
     print "  timeout set                                                   \n";
     print "       <proxy> <direct>  sets the network timeouts in seconds   \n";
+    print "  reset error counters   resets the counter for I/O errors      \n";
     print "  pid                    gets the pid                           \n";
     print "  version                gets cvmfs version                     \n";
     print "  version patchlevel     gets cvmfs patchlevel                  \n";

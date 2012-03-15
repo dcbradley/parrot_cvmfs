@@ -196,7 +196,7 @@ cvmfs_pull_LDADD += ../../sqlite3/src/libsqlite3.a
 endif
 
 if ! SYSTEM_LIBCURL
-LDFLAGS_CURL = ../../libcurl/src/lib/.libs/libcurl.a $(Z_LIBS) -lrt 
+LDFLAGS_CURL = ../../libcurl/src/lib/.libs/libcurl.a ../../c-ares/src/.libs/libcares.a $(Z_LIBS) -lrt 
 cvmfs2_debug_LDADD += $(LDFLAGS_CURL)
 cvmfs2_LDADD += $(LDFLAGS_CURL)
 cvmfs_proxy_rtt_LDADD += $(LDFLAGS_CURL)
