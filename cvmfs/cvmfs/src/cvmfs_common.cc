@@ -165,6 +165,10 @@ namespace cvmfs {
       return (current_max < ttl) ? current_max : ttl;
    }
 
+   void reset_error_counters() {
+      atomic_init(&nioerr);
+   }
+
    unsigned get_max_ttl() {
       pthread_mutex_lock(&mutex_max_ttl);
       const unsigned current_max = max_ttl/60;
