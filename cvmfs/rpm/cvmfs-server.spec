@@ -1,10 +1,10 @@
 Summary: CernVM File System Server Utilities
 Name: cvmfs-server
-Version: 2.0.9
+Version: 2.0.12
 Release: 1
 Source0: https://cernvm.cern.ch/project/trac/downloads/cernvm/cvmfs-%{version}.tar.gz
 Group: System/Filesystems
-License: Copyright (c) 2.0.9, CERN.  Distributed unter the BSD License.
+License: Copyright (c) 2.0.1, CERN.  Distributed unter the BSD License.
 Requires: httpd cvmfs-keys >= 1.1
 Requires(post): chkconfig 
 Requires(preun): chkconfig initscripts

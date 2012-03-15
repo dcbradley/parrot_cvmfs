@@ -53,6 +53,7 @@
 #include <sys/wait.h>
 #include <sys/errno.h>
 #include <sys/mount.h>
+#include <sys/file.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -160,6 +161,10 @@ namespace cvmfs {
 
       pmesg(D_CVMFS, "building effective TTL from max (%u) and given (%u)", current_max, ttl);
       return (current_max < ttl) ? current_max : ttl;
+   }
+
+   void reset_error_counters() {
+      atomic_init(&nioerr);
    }
 
    unsigned get_max_ttl() {
@@ -2258,8 +2263,11 @@ int main(int argc, char *argv[])
    bool quota_ready = false;
    bool catalog_ready = false;
    bool talk_ready = false;
+   bool running_created = false;
    int err_catalog;
    int num_hosts;
+   int fd_lockfile = -1;
+   int retval;
 
    /* Set a decent umask for new files (no write access to group/everyone).
       We want to allow group write access for the talk-socket. */
@@ -2304,8 +2312,6 @@ int main(int argc, char *argv[])
       usage(argv[0]);
       goto cvmfs_cleanup;
    }
-
-
 
    /* Fill cvmfs option variables from Fuse options */
    if (!cvmfs::uid) cvmfs::uid = getuid();
@@ -2385,6 +2391,7 @@ int main(int argc, char *argv[])
    curl_set_proxy_chain(cvmfs::proxies.c_str());
    curl_set_timeout(cvmfs_opts.timeout, cvmfs_opts.timeout_direct);
 
+
    /* Try to jump to cache directory.  This tests, if it is accassible.  Also, it brings speed later on. */
    if (!mkdir_deep(cvmfs::cachedir, 0700) || (chdir(cvmfs::cachedir.c_str()) != 0)) {
       cerr << "Failure: cache directory " << cvmfs::cachedir << " is unavailable" << endl;
@@ -2392,6 +2399,31 @@ int main(int argc, char *argv[])
    }
 
    curl_ready = true;
+
+   // Create lock file
+   fd_lockfile = open("lock", O_RDONLY | O_CREAT, 0600);
+   if (fd_lockfile < 0) {
+      cerr << "Failure: could not open lock file (" << errno << ")" << endl;
+      goto cvmfs_cleanup;
+   }
+   if (flock(fd_lockfile, LOCK_EX) != 0) {
+      cerr << "Failure: could not acquire lock (" << errno << ")" << endl;
+      goto cvmfs_cleanup;
+   }
+   {
+      struct stat info;
+      if (stat("running", &info) == 0) {
+         logmsg("Looks like cvmfs has been crashed previously, rebuilding cache database");
+         cvmfs_opts.rebuild_cachedb = 1;
+      }
+   }
+   retval = open("running", O_RDONLY | O_CREAT, 0600);
+   if (retval < 0) {
+      cerr << "Failure: could not acquire running sentinel (" << errno << ")" << endl;
+      goto cvmfs_cleanup;
+   }
+   close(retval);
+   running_created = true;
 
    /* Try to init the cache... this creates a set of directories in
       cvmfs::cachedir (256 directories named 00..ff) */
@@ -2503,13 +2535,18 @@ int main(int argc, char *argv[])
    pmesg(D_CVMFS, "Fuse loop terminated (%d)", result);
    logmsg("CernVM-FS: unmounted %s (%s)", cvmfs::mountpoint.c_str(), cvmfs::root_url.c_str());
 
-
 cvmfs_cleanup:
    if (talk_ready) talk::fini();
    if (catalog_ready) catalog::fini();
    if (quota_ready) lru::fini();
    if (signature_ready) signature::fini();
    if (cache_ready) cache::fini();
+   if (running_created) unlink("running");
+   if (fd_lockfile >= 0) {
+      int retval = flock(fd_lockfile, LOCK_UN);
+      assert(retval == 0);
+      close(fd_lockfile);
+   }
    if (monitor_ready) monitor::fini();
    if (options_ready) {
       fuse_opt_free_args(&fuse_args);

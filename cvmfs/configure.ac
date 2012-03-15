@@ -3,7 +3,7 @@ dnl  Process this file with autoconf to produce a
 dnl  configure script.
 
 dnl AC_PREREQ(2.50)
-AC_INIT([CVMFS], [2.0.9], [cernvm.support@cern.ch])
+AC_INIT([CVMFS], [2.0.12], [cernvm.support@cern.ch])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_CONFIG_SRCDIR([cvmfs/src/cvmfs.cc])
 AC_CONFIG_HEADER([config.h])
@@ -155,6 +155,7 @@ dnl                 memmove memset mkdir pow rmdir select socket strchr strdup s
 dnl                 strrchr uname utime stat64])
 
 AC_CONFIG_SUBDIRS([zlib/src])
+AC_CONFIG_SUBDIRS([c-ares/src])
 AC_CONFIG_SUBDIRS([libcurl/src])
 AC_CONFIG_SUBDIRS([libfuse/src])
 AC_CONFIG_SUBDIRS([jemalloc/src])
