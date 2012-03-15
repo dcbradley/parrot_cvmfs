@@ -10,7 +10,7 @@ The CVMFS and parrot code was checked out from the project
 subversion repositories and was copied into the 'upstream' branch.
 The following versions are currently used:
 
-cvmfs trunk r3170
+cvmfs trunk r3371
 cctools trunk r1846
 
 To see the development that has been done, compare the master
@@ -48,6 +48,11 @@ cd libfuse
 tar xvzf fuse-2.8.4.tar.gz
 mv fuse-2.8.4/* src/
 patch -p0 -i fuse-drainout.patch
+cd ..
+
+cd c-ares
+tar xvzf c-ares-1.7.5.tar.gz
+mv c-ares-1.7.5/* src/
 cd ..
 
 aclocal && autoheader && autoconf && automake
