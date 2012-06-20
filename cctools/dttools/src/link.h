@@ -74,14 +74,30 @@ which is usually what you want.
 */
 struct link *link_serve(int port);
 
+/** Prepare to accept connections.
+@ref link_serve_range will accept connections on any network interface, which is usually what you want.
+@param low The low port in a range to listen on (inclusive).
+@param high The high port in a range to listen on (inclusive).
+@return link A server endpoint that can be passed to @ref link_accept, or null on failure.
+*/
+struct link *link_serve_range(int low, int high);
+
 /** Prepare to accept connections on one network interface.
-Functions like @ref link_serve, except that the server will
-only be visible on the given network interface.
+Functions like @ref link_serve, except that the server will only be visible on the given network interface.
 @param addr IP address of the network interface.
 @param port The port number to listen on.
 @return link A server endpoint that can be passed to @ref link_accept, or null on failure.
 */
 struct link *link_serve_address(const char *addr, int port);
+
+/** Prepare to accept connections on one network interface.
+Functions like @ref link_serve, except that the server will only be visible on the given network interface and allows for a port range.
+@param addr IP address of the network interface.
+@param low The low port in a range to listen on (inclusive).
+@param high The high port in a range to listen on (inclusive).
+@return link A server endpoint that can be passed to @ref link_accept, or null on failure.
+*/
+struct link *link_serve_addrrange(const char *addr, int low, int high);
 
 /** Accept one connection.
 @param master A link returned from @ref link_serve or @ref link_serve_address.
@@ -235,6 +251,13 @@ int link_fd(struct link *link);
 int link_keepalive(struct link *link, int onoff);
 
 int link_nonblocking(struct link *link, int onoff);
+
+
+/** Check whether a link has unread contents in its buffer.
+@param link The link to examine.
+@return 1 if buffer is empty, 0 otherwise.
+*/
+int link_buffer_empty(struct link *link);
 
 /** Return the local address of the link in text format.
 @param link The link to examine.

@@ -1372,7 +1372,7 @@ void dag_run(struct dag *d)
 				if(n)
 					dag_node_complete(d, n, &info);
 			} else {
-				debug(D_DEBUG, "No job has finished in the last %d seconds.\n", tmp_timeout);
+				debug(D_DEBUG, "No job has finished in the past %d seconds.\n", tmp_timeout);
 			}
 		}
 
@@ -1422,14 +1422,13 @@ static void show_help(const char *cmd)
 	fprintf(stdout, " -T <type>      Batch system type: %s. (default is local)\n", batch_queue_type_string());
 	fprintf(stdout, " -j <#>         Max number of local jobs to run at once.    (default is # of cores)\n");
 	fprintf(stdout, " -J <#>         Max number of remote jobs to run at once.   (default is 100)\n");
-	fprintf(stdout, " -p <port>      Port number to use with work queue.         (default is %d, -1=random)\n", WORK_QUEUE_DEFAULT_PORT);
+	fprintf(stdout, " -p <port>      Port number to use with work queue.         (default is %d, 0=arbitrary)\n", WORK_QUEUE_DEFAULT_PORT);
 	fprintf(stdout, " -N <project>   Set the project name to <project>\n");
 	fprintf(stdout, " -P <integer>   Priority. Higher the value, higher the priority.\n");
 	fprintf(stdout, " -a             Advertise the master information to a catalog server.\n");
 	fprintf(stdout, " -C <catalog>   Set catalog server to <catalog>. Format: HOSTNAME:PORT \n");
 	fprintf(stdout, " -e             Set the work queue master to only accept workers that have the same -N <project> option.\n");
-	fprintf(stdout, " -E             Enable master capacity estimation in Work Queue. Estimated master capcity may be viewed in the work queue log file or through the  work_queue_status command.\n");
-	fprintf(stdout, " -M             Enable automatic excessive worker removal in Work Queue. (-E option will be automatically added when this option is given.)\n");
+	fprintf(stdout, " -E             Enable master capacity estimation in Work Queue. Estimated master capacity may be viewed in the work queue log file or through the  work_queue_status command.\n");
 	fprintf(stdout, " -F <#>         Work Queue fast abort multiplier.           (default is deactivated)\n");
 	fprintf(stdout, " -I             Show input files.\n");
 	fprintf(stdout, " -O             Show output files.\n");
@@ -1466,21 +1465,20 @@ int main(int argc, char *argv[])
 	const char *batch_submit_options = getenv("BATCH_OPTIONS");
 	int auto_workers = 0;
 	int work_queue_master_mode = WORK_QUEUE_MASTER_MODE_STANDALONE;
-	int work_queue_worker_mode = WORK_QUEUE_WORKER_MODE_SHARED;
 	int work_queue_estimate_capacity_on = 0;
-	int work_queue_auto_remove_workers_on = 0;
-	int work_queue_wait_routine = WORK_QUEUE_WAIT_UNSPECIFIED;
 	char *catalog_host;
 	int catalog_port;
+	int port_set = 0;
 
 	debug_config(argv[0]);
 
-	while((c = getopt(argc, argv, "aAB:cC:d:DeEF:GhiIj:J:kKl:L:MN:o:Op:P:r:RS:t:T:vw:W:z:Z:")) != (char) -1) {
+	while((c = getopt(argc, argv, "aAB:cC:d:DEF:GhiIj:J:kKl:L:MN:o:Op:P:r:RS:t:T:vw:W:z:")) != (char) -1) {
 		switch (c) {
 		case 'A':
 			skip_afs_check = 1;
 			break;
 		case 'p':
+			port_set = 1;
 			port = atoi(optarg);
 			break;
 		case 'c':
@@ -1498,14 +1496,8 @@ int main(int argc, char *argv[])
 		case 'a':
 			work_queue_master_mode = WORK_QUEUE_MASTER_MODE_CATALOG;
 			break;
-		case 'e':
-			work_queue_worker_mode = WORK_QUEUE_WORKER_MODE_EXCLUSIVE;
-			break;
 		case 'E':
 			work_queue_estimate_capacity_on = 1;
-			break;
-		case 'M':
-			work_queue_auto_remove_workers_on = 1;
 			break;
 		case 'C':
 			if(!parse_catalog_server_description(optarg, &catalog_host, &catalog_port)) {
@@ -1518,7 +1510,6 @@ int main(int argc, char *argv[])
 			setenv("CATALOG_PORT", value, 1);
 			free(value);
 
-			work_queue_master_mode = WORK_QUEUE_MASTER_MODE_CATALOG;
 			break;
 		case 'I':
 			display_mode = SHOW_INPUT_FILES;
@@ -1604,17 +1595,6 @@ int main(int argc, char *argv[])
 		case 'K':
 			preserve_symlinks = 1;
 			break;
-		case 'Z':
-			if(!strcmp(optarg, "fcfs")) {
-				work_queue_wait_routine = WORK_QUEUE_WAIT_FCFS;
-			} else if(!strcmp(optarg, "fd")) {
-				work_queue_wait_routine = WORK_QUEUE_WAIT_FAST_DISPATCH;
-			} else if(!strcmp(optarg, "adaptive")) {
-				work_queue_wait_routine = WORK_QUEUE_WAIT_ADAPTIVE;
-			} else {
-				work_queue_wait_routine = WORK_QUEUE_WAIT_UNSPECIFIED;
-			}
-			break;
 		case 't':
 			setenv("WORK_QUEUE_CAPACITY_TOLERANCE", optarg, 1);
 			break;
@@ -1649,38 +1629,22 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 
-		char *value = string_format("%d", work_queue_worker_mode);
-		setenv("WORK_QUEUE_WORKER_MODE", value, 1);
-		free(value);
-
-		value = string_format("%d", work_queue_master_mode);
+		char *value = string_format("%d", work_queue_master_mode);
 		setenv("WORK_QUEUE_MASTER_MODE", value, 1);
 		free(value);
 
 		if(work_queue_estimate_capacity_on) {
-			value = string_format("%d", WORK_QUEUE_SWITCH_ON);
-			setenv("WORK_QUEUE_ESTIMATE_CAPACITY_ON", value, 1);
-			free(value);
+			setenv("WORK_QUEUE_ESTIMATE_CAPACITY_ON","1",1);
 		}
 
-		if(work_queue_auto_remove_workers_on) {
-			value = string_format("%d", WORK_QUEUE_SWITCH_ON);
-			setenv("WORK_QUEUE_AUTO_REMOVE_WORKERS_ON", value, 1);
-			free(value);
-		}
-
-		value = string_format("%d", work_queue_wait_routine);
-		setenv("WORK_QUEUE_WAIT_ROUTINE", value, 1);
-		free(value);
-
-		if(port != 0) {
+		if(port_set) {
 			value = string_format("%d", port);
 			setenv("WORK_QUEUE_PORT", value, 1);
 			free(value);
 		} else {
 			// Use work queue default port in standalone mode when port is not
 			// specified with -p option. In work queue catalog mode, work queue
-			// would choose a random port when port is not explicitly specified.
+			// would choose an arbitrary port when port is not explicitly specified.
 			if(work_queue_master_mode == WORK_QUEUE_MASTER_MODE_STANDALONE) {
 				value = string_format("%d", WORK_QUEUE_DEFAULT_PORT);
 				setenv("WORK_QUEUE_PORT", value, 1);

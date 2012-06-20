@@ -82,11 +82,11 @@ chmod 755 worker.sh
 
 if [ $use_jobarray = 1 ]
 then
-	qsub -t 1-$count:1 -cwd $parameters worker.sh	
+	qsub -t 1-$count:1 -d `pwd` $parameters worker.sh	
 else 
 	for n in `seq 1 $count`
 	do
-		qsub -cwd $parameters worker.sh
+		qsub -d `pwd` $parameters worker.sh
 	done
 fi
 return_status=$?

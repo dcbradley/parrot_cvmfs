@@ -23,7 +23,7 @@ void specify_work_queue_task_files(struct work_queue_task *t, const char *input_
 			if(p) {
 				*p = 0;
 				work_queue_task_specify_input_file(t, f, p + 1);
-				debug(D_DEBUG, "local file %s is %s on remote system:", f, p + 1);
+				debug(D_BATCH, "local file %s is %s on remote system:", f, p + 1);
 				*p = '=';
 			} else {
 				work_queue_task_specify_input_file(t, f, f);
@@ -41,7 +41,7 @@ void specify_work_queue_task_files(struct work_queue_task *t, const char *input_
 			if(p) {
 				*p = 0;
 				work_queue_task_specify_output_file(t, f, p + 1);
-				debug(D_DEBUG, "remote file %s is %s on local system:", f, p + 1);
+				debug(D_BATCH, "remote file %s is %s on local system:", f, p + 1);
 				*p = '=';
 			} else {
 				work_queue_task_specify_output_file(t, f, f);
@@ -74,7 +74,7 @@ void specify_work_queue_task_shared_files(struct work_queue_task *t, const char 
 
 			if(p) {
 				work_queue_task_specify_file(t, file, p + 1, WORK_QUEUE_INPUT, WORK_QUEUE_CACHE | WORK_QUEUE_THIRDGET);
-				debug(D_DEBUG, "shared file %s is %s on remote system:", file, p + 1);
+				debug(D_BATCH, "shared file %s is %s on remote system:", file, p + 1);
 				*p = '=';
 			} else {
 				work_queue_task_specify_file(t, file, file, WORK_QUEUE_INPUT, WORK_QUEUE_CACHE | WORK_QUEUE_THIRDGET);
@@ -105,7 +105,7 @@ void specify_work_queue_task_shared_files(struct work_queue_task *t, const char 
 
 			if(p) {
 				work_queue_task_specify_file(t, file, p + 1, WORK_QUEUE_OUTPUT, WORK_QUEUE_THIRDPUT);
-				debug(D_DEBUG, "shared file %s is %s on remote system:", file, p + 1);
+				debug(D_BATCH, "shared file %s is %s on remote system:", file, p + 1);
 				*p = '=';
 			} else {
 				work_queue_task_specify_file(t, file, file, WORK_QUEUE_OUTPUT, WORK_QUEUE_THIRDPUT);
@@ -236,8 +236,11 @@ batch_job_id_t batch_job_wait_work_queue(struct batch_queue * q, struct batch_jo
 	// Print to work queue log since status has been changed.
 	work_queue_get_stats(q->work_queue, &s);
 
-	fprintf(logfile, "QUEUE %llu %d %d %d %d %d %d %d %d %d %d %lld %lld %.2f %.2f %d %d %d %d\n", timestamp_get(), s.workers_init, s.workers_ready, s.workers_busy, s.tasks_running, s.tasks_waiting, s.tasks_complete, s.total_tasks_dispatched,
-		s.total_tasks_complete, s.total_workers_joined, s.total_workers_removed, s.total_bytes_sent, s.total_bytes_received, s.efficiency, s.idle_percentage, s.capacity, s.avg_capacity, s.total_workers_connected, s.excessive_workers_removed);
+	char * workers_by_pool = work_queue_get_worker_summary(q->work_queue);
+
+	fprintf(logfile, "QUEUE %llu %d %d %d %d %d %d %d %d %d %d %lld %lld %.2f %.2f %d %d %d %s\n", timestamp_get(), s.workers_init, s.workers_ready, s.workers_busy, s.tasks_running, s.tasks_waiting, s.tasks_complete, s.total_tasks_dispatched, s.total_tasks_complete, s.total_workers_joined, s.total_workers_removed, s.total_bytes_sent, s.total_bytes_received, s.efficiency, s.idle_percentage, s.capacity, s.avg_capacity, s.total_workers_connected, workers_by_pool);
+
+	free(workers_by_pool);
 
 	fflush(logfile);
 	fsync(fileno(logfile));

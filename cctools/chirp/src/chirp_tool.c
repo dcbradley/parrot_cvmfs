@@ -102,7 +102,7 @@ static int process_command(int argc, char **argv);
 
 static int timeout = 3600;
 static time_t stoptime = 0;
-static char current_host[CHIRP_PATH_MAX] = { 0 };
+static char current_host[CHIRP_PATH_MAX] = {0};
 static char current_local_dir[CHIRP_PATH_MAX];
 static char current_remote_dir[CHIRP_PATH_MAX];
 static char current_subject[CHIRP_LINE_MAX];
@@ -372,7 +372,7 @@ static INT64_T do_open(int argc, char **argv)
 		strcpy(current_host, argv[1]);
 		strcpy(current_remote_dir, "/");
 		if(interactive_mode)
-			printf("connected to %s as %s\n", current_host, current_subject);
+			fprintf(stderr, "connected to %s as %s\n", current_host, current_subject);
 		return 0;
 	} else {
 		return -1;
