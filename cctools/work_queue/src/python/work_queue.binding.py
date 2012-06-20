@@ -2,14 +2,10 @@
 #
 # Python Work Queue bindings.
 #
-# The objects and methods provided by this package should correspond to the
-# native C API in @ref work_queue.h.
+# The objects and methods provided by this package correspond to the native 
+# C API in @ref work_queue.h.
 #
-# The new SWIG-based bindings provides two levels of access to the Work Queue
-# library.  The first version provides a 1-to-1 function correspondance to the
-# C API.
-#
-# The second version provides a more Pythonic or higher-level interface that
+# The SWIG-based Python bindings provide a higher-level interface that
 # revolves around the following objects:
 #
 # - @ref work_queue::WorkQueue
@@ -27,19 +23,6 @@ cctools_debug_config('work_queue_python')
 # Python Task object
 #
 # This class is used to create a task specification.
-#
-# Example:
-# @code
-# # Create and specify Task
-# task = Task('date > current.date')
-# task.specify_algorithm(WORK_QUEUE_SCHEDULE_FCFS)
-# task.specify_input_file('/usr/bin/date', 'date')
-# task.specify_tag('my date task')
-#
-# # Create Work Queue and submit Task
-# work_queue = WorkQueue()
-# work_queue.submit(task)
-# @endcode
 class Task(_object):
 
     ##
@@ -100,6 +83,10 @@ class Task(_object):
     @property
     def result(self):
         return self._task.result
+	
+    @property
+    def hostname(self):
+        return self._task.hostname
 
     @property
     def host(self):
@@ -162,8 +149,6 @@ class Task(_object):
     #                   - @ref WORK_QUEUE_SCHEDULE_FCFS
     #                   - @ref WORK_QUEUE_SCHEDULE_FILES
     #                   - @ref WORK_QUEUE_SCHEDULE_TIME
-    #                   - @ref WORK_QUEUE_SCHEDULE_DEFAULT
-    #                   - @ref WORK_QUEUE_SCHEDULE_PREFERRED_HOSTS
     #                   - @ref WORK_QUEUE_SCHEDULE_RAND
     def specify_algorithm(self, algorithm):
         return work_queue_task_specify_algorithm(self._task, algorithm)
@@ -194,9 +179,6 @@ class Task(_object):
     # @param flags          May be zero to indicate no special handling, or any of the following or'd together:
     #                       - @ref WORK_QUEUE_NOCACHE
     #                       - @ref WORK_QUEUE_CACHE
-    #                       - @ref WORK_QUEUE_SYMLINK
-    #                       - @ref WORK_QUEUE_THIRDGET
-    #                       - @ref WORK_QUEUE_THIRDPUT
     # @param cache          Legacy parameter for setting file caching attribute.  By default this is enabled.
     #
     # Example:
@@ -272,17 +254,19 @@ class WorkQueue(_object):
     # @param shutdown   Automatically shutdown workers when queue is finished. Disabled by default.
     #
     # @see work_queue_create    - For more information about environmental variables that affect the behavior this method.
-    def __init__(self, port=WORK_QUEUE_DEFAULT_PORT, name=None, catalog=True, exclusive=True, shutdown=False):
+    def __init__(self, port=WORK_QUEUE_DEFAULT_PORT, name=None, catalog=False, exclusive=True, shutdown=False):
+        self._shutdown   = shutdown
         self._work_queue = work_queue_create(port)
+        if not self._work_queue:
+            raise 
+
         self._stats      = work_queue_stats()
         self._task_table = {}
-        self._shutdown   = shutdown
 
         if name:
             work_queue_specify_name(self._work_queue, name)
 
         work_queue_specify_master_mode(self._work_queue, catalog)
-        work_queue_specify_worker_mode(self._work_queue, exclusive)
 
     def __del__(self):
         if self._shutdown:
@@ -337,11 +321,20 @@ class WorkQueue(_object):
     #                   - @ref WORK_QUEUE_SCHEDULE_FCFS
     #                   - @ref WORK_QUEUE_SCHEDULE_FILES
     #                   - @ref WORK_QUEUE_SCHEDULE_TIME
-    #                   - @ref WORK_QUEUE_SCHEDULE_DEFAULT
-    #                   - @ref WORK_QUEUE_SCHEDULE_PREFERRED_HOSTS
     #                   - @ref WORK_QUEUE_SCHEDULE_RAND
     def specify_algorithm(self, algorithm):
         return work_queue_specify_algorithm(self._work_queue, algorithm)
+
+    ##
+    # Set the order for dispatching submitted tasks in the queue.
+    #
+    # @param self       Reference to the current work queue object.
+    # @param order  	One of the following algorithms to use in dispatching
+	# 					submitted tasks to workers:
+    #                   - @ref WORK_QUEUE_TASK_ORDER_FIFO
+    #                   - @ref WORK_QUEUE_TASK_ORDER_LIFO
+    def specify_task_order(self, order):
+        return work_queue_specify_task_order(self._work_queue, order)
 
     ##
     # Change the project name for the given queue.
@@ -368,12 +361,20 @@ class WorkQueue(_object):
         return work_queue_specify_master_mode(self._work_queue, mode)
 
     ##
-    # Specify the worker mode for the given queue.
+    # Cancel task identified by its taskid and remove from the given queue. 
     #
     # @param self   Reference to the current work queue object.
-    # @param mode   This may be one of the following values: @ref WORK_QUEUE_WORKER_MODE_SHARED or @ref WORK_QUEUE_WORKER_MODE_EXCLUSIVE.
-    def specify_worker_mode(self, mode):
-        return work_queue_specify_worker_mode(self._work_queue, mode)
+    # @param id     The taskid returned from @ref submit.
+    def cancel_by_taskid(self, id):
+        return work_queue_cancel_by_taskid(self._work_queue, id)
+
+    ##
+    # Cancel task identified by its tag and remove from the given queue. 
+    #
+    # @param self   Reference to the current work queue object.
+    # @param tag    The tag assigned to task using @ref work_queue_task_specify_tag.
+    def cancel_by_tasktag(self, tag):
+        return work_queue_cancel_by_tasktag(self._work_queue, tag)
 
     ##
     # Shutdown workers connected to queue.
@@ -393,8 +394,9 @@ class WorkQueue(_object):
     # @param self   Reference to the current work queue object.
     # @param task   A task description created from @ref work_queue::Task.
     def submit(self, task):
-        self._task_table[task.id] = task
-        return work_queue_submit(self._work_queue, task._task)
+		taskid = work_queue_submit(self._work_queue, task._task)
+		self._task_table[taskid] = task
+		return taskid 
 
     ##
     # Wait for tasks to complete.
@@ -406,9 +408,9 @@ class WorkQueue(_object):
     #                   before returning.  Use an integer to set the timeout or the constant @ref
     #                   WORK_QUEUE_WAITFORTASK to block until a task has completed.
     def wait(self, timeout=WORK_QUEUE_WAITFORTASK):
-        task_pointer = work_queue_wait(self._work_queue, timeout)
-        if task_pointer:
-            task = self._task_table[int(task_pointer.taskid)]
-            del(self._task_table[task_pointer.taskid])
-            return task
-        return None
+		task_pointer = work_queue_wait(self._work_queue, timeout)
+		if task_pointer:
+			task = self._task_table[int(task_pointer.taskid)]
+			del(self._task_table[task_pointer.taskid])
+			return task
+		return None

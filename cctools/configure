@@ -7,9 +7,9 @@ uname -a
 save_arguments $0 $@
 
 major=3
-minor=4
-micro=2
-release_date="02/10/2012"
+minor=5
+micro=0
+release_date="06/04/2012"
 
 build_user=`whoami`
 build_host=`uname -n`
@@ -325,7 +325,6 @@ done
 
 require_path ${ccompiler}
 require_path ${cxxcompiler}
-require_path "install"
 require_gnu_make
 
 #
@@ -652,6 +651,7 @@ then
 	if [ $build_sys = LINUX ]
 	then
 		cctools_readline_ldflags="-lreadline ${link_no_as_needed} -lncurses -lhistory ${link_as_needed}"
+		ldflags=`echo $ldflags | sed "s/-lreadline/$cctools_readline_ldflags/"`
 	else 
 		library_search ncurses ${readline_path}
 		library_search termcap ${readline_path}
@@ -763,7 +763,7 @@ then
 		python_version=`${python} -V 2>&1 | cut -d " " -f 2`
 		echo "python version is ${python_version}"
 		python_major_version=`echo ${python_version} | cut -d . -f 1`
-		python_minor_version=`echo ${python_version} | cut -d . -f 2`
+		python_minor_version=`echo ${python_version} | cut -d . -f 2 | cut -d . -f 1,2`
 		if [ "$python_major_version" -eq 2 -a "$python_minor_version" -ge 4 ]
 		then
 			if check_file ${python_path}/include/python2.$python_minor_version/Python.h
@@ -776,7 +776,9 @@ then
 from distutils import sysconfig
 flags = ['-I' + sysconfig.get_python_inc(),
 	 '-I' + sysconfig.get_python_inc(plat_specific=True)]
-flags.extend(sysconfig.get_config_var('CFLAGS').split())
+syscfgflags = sysconfig.get_config_var('CFLAGS')
+if not syscfgflags is None:
+    flags.extend(syscfgflags.split())
 print ' '.join(flags)
 EOF
 				${python} > $python_ldflags_file <<EOF
@@ -887,7 +889,18 @@ else
 	echo "*** not building html or man pages"
 fi
 
-ccflags="${ccflags} -DINSTALL_PATH=\\\"${install_path}\\\" -g -D_REENTRANT -D_GNU_SOURCE -DBUILD_USER=\\\"$build_user\\\" -DBUILD_HOST=\\\"$build_host\\\" -DCCTOOLS_VERSION_MAJOR=$major -DCCTOOLS_VERSION_MINOR=$minor -DCCTOOLS_VERSION_MICRO=$micro -DCCTOOLS_OPSYS_${build_sys} -DCCTOOLS_CPU_${build_cpu}"
+# We always compile with debugging enabled,
+# however on Solaris, the -g option results in a different
+# debugging format that causes linking errors in getopt code.
+
+if [ $build_sys = SUNOS ]
+then
+	debug_flag="-gstabs+"
+else
+	debug_flag="-g"
+fi
+
+ccflags="${ccflags} -DINSTALL_PATH=\\\"${install_path}\\\" $debug_flag -D_REENTRANT -D_GNU_SOURCE -DBUILD_USER=\\\"$build_user\\\" -DBUILD_HOST=\\\"$build_host\\\" -DCCTOOLS_VERSION_MAJOR=$major -DCCTOOLS_VERSION_MINOR=$minor -DCCTOOLS_VERSION_MICRO=$micro -DCCTOOLS_OPSYS_${build_sys} -DCCTOOLS_CPU_${build_cpu}"
 
 echo "Creating Makefile.config..."
 
