@@ -11,7 +11,7 @@ subversion repositories and was copied into the 'upstream' branch.
 The following versions are currently used:
 
 cvmfs trunk r3371
-cctools trunk r1846
+cctools trunk r2147
 
 To see the development that has been done, compare the master
 branch to the upstream branch:
@@ -35,6 +35,7 @@ cd cvmfs
 
 cd jemalloc
 tar xvjf jemalloc-2.2.1.tar.bz2
+mkdir -p src
 mv jemalloc-2.2.1/* src/
 patch -p0 -i jemalloc-2.2.1-64bit_literals.patch
 cd ..
