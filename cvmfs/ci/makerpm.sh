@@ -18,13 +18,12 @@ cp ${rpmdir}/cvmfs.te $packagedir/SOURCES || exit 8
 cp $tarball $packagedir/SOURCES || exit 5
 cd $packagedir || exit 6
 version=`basename $tarball | sed 's/^cvmfs-//' | sed 's/\.tar\.gz//'`
-echo $version | grep '[A-Za-z]'
+echo $version | grep 'git'
 if [ $? -eq 0 ]; then
-  version_num=`echo $version | sed 's/[A-Za-z]//g'`
-  sed -i -e "s/^Release: .*/Release: 0.$prerelease.${version_num}svn%{?dist}/" cvmfs-universal.spec || exit 7
-  sed -i -e "s/%{version}/$version/" cvmfs-universal.spec || exit 7
+  version_num=`echo $version | sed 's/^git-//g'`
+  sed -i -e "s/^Release: .*/Release: 0.$prerelease.${version_num}git%{?dist}/" cvmfs-universal.spec || exit 7
+  sed -i -e "s/\(^Source0: .*\)%{version}/\1$version/" cvmfs-universal.spec || exit 7
   sed -i -e "s/^%setup -q/%setup -q -n cvmfs-$version/" cvmfs-universal.spec || exit 7
-  sed -i -e "s|^#FIX-PRERELEASE-DOCDIR|mv \$RPM_BUILD_ROOT/usr/share/doc/%{name}-$version \$RPM_BUILD_ROOT/usr/share/doc/%{name}-%{version}|" cvmfs-universal.spec || exit 7
 fi
 echo "%_topdir $packagedir" > ~/.rpmmacros
 echo "%_tmppath ${packagedir}/TMP" >> ~/.rpmmacros

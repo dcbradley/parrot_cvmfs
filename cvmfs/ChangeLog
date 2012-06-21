@@ -1,78 +1,15 @@
-2.0.12:
-  * Fixed synchronization bug in server tools when a symlink
-    and a regular file are created an one is renamed to the other
-
-2.0.11:
-  * Fixed installing keys in make install
-  * Raised maximum number of open files to 64k
-  * RPM builds on SL6, Fedora 16
-  * Fixed missing include for SL6
-  * Fixed message about missing /sbin/umount.cvmfs in cvmfs_config
-
-2.0.10:
-  * Opportunistically rebuild cache database when a precious crash
-    has been detecte
-  * Added new CERN IT master keys
-  * Fixed a race condition when quickly unmounting and mounting   
-
-2.0.9:
-  * Fixed O_DIRECT caused bugs when loading cached certificates
-  * New cvmfs-talk command "reset error counters"
-  * Switched to c-ares resolver
-  * Moved X-CVMFS2 to "user-agent" and included proxy server
-  * Added a libcvmfs.a for use with Parrot.  The library is only built,
-    not installed
-  
-2.0.8:
-  * Fix chmod failure in cvmfs_sync.bin when catalog is created by
-    another user  
-
-2.0.7:
-  * Better detection in cvmfs_sync for malformed paths in fschanges
-  * Fixed a bug when checking the size of large files after download
-  * Fixed a bug in the error handling for creating nested catalogs
-  * Improved error messages in cvmfs_sync.cc:move_to_datastore
-  * Accept multiple public keys separated by ":".  Any of them may
-    validate a whitelist.
-  * Fixed a bug in redirfs that prevents lchown on symlinks to
-    take effect
-  * Mount helper accepts the -n option.  Not ideal as there is no
-    way to pass it to fusermount, but it works for non-existing / 
-    read-only /etc/mtab
-  * Open files in cache with O_DIRECT and O_NOATIME
-  * Fixed a presentation bug in cvmfs-talk if CVMFS_REPOSITORIES
-    is undefined and no repository is given to cvmfs-talk
-  * Removed /etc/mtab fixing, cvmfs2 has now fuse as file system
-    type (not cvmfs)
-
-2.0.6:
-  * Server tools use system umask if CVMFS_SYSTEM_UMASK is yes;
-    otherwise it's 0022
-  * Better support of cvmfs service and cvmfs-talk for no 
-    strict mount setting
-  * Better detection for missing chunk directories in cache
-  * Fixed quota cleanup on startup
-  * Added distribution to release for SLC6 spec file
-  * Changed default cache quota to 4G
-  * Updated Nagios check    
-
 2.0.5:
-  * Removed race condition for .cvmfspublished when repositories
-    are updated
-  * Cosmetics for cvmfs_config
-  * Some compatibility fixes for server side and Ubuntu  
-
-2.0.4:
-  * Check schema version when loading catalogs
   * Warn in cvmfs_config chksetup if no cache quota is set
   * Create cvmfs user in cvmfs_server if necessary
   * Fixed cvmfs_fsck on xfs
   * Fixed get_origin in config.sh
-  * Speed up search for existing mount point in mount helper
+  * Speed up searach for existing mount point in mount helper
   * Log to syslog when new repository snapshot is applied
   * Fixed presentation error in cvmfs_stat
   * Added repository prefix to syslog messages
   * Fixed reporting of maximum cache size in cvmfs_config stat
+
+2.0.4:
   * Re-opened the CVMFS_NFILES parameter for overwrites
  
 2.0.3:

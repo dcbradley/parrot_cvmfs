@@ -1,53 +1,65 @@
 #!/bin/sh
 
-CURL_VERSION=7.21.3
 CARES_VERSION=1.7.5
-FUSE_VERSION=2.8.4
-REDIRFS_VERSION=SVN-671
-JEMALLOC_VERSION=2.2.1
+CURL_VERSION=7.24.0
 ZLIB_VERSION=1.2.5
+SPARSEHASH_VERSION=1.11
 
-cd libcurl
-tar xfz curl-${CURL_VERSION}.tar.gz 
-mv curl-${CURL_VERSION}/* src/
-rm -rf curl-${CURL_VERSION}
-cd ..
+# put the extracted stuff out of source for compilation (location given by cmake)
+outOfSource=$1
 
-cd c-ares
-tar xfz c-ares-${CARES_VERSION}.tar.gz
-mv c-ares-${CARES_VERSION}/* src/
+# check if bootstrapping already happened
+if [ -f "$outOfSource/.decompressionDone" ]; then
+	exit 0
+fi
+
+# C-ARES
+cd externals/c-ares
+tar xvfz c-ares-${CARES_VERSION}.tar.gz
+mkdir -p "$outOfSource/c-ares/src"
+mv c-ares-1.7.5/* "$outOfSource/c-ares/src"
+cp src/* "$outOfSource/c-ares/src"
 rm -rf c-ares-${CARES_VERSION}
-cd ..
-
-cd libfuse
-tar xfz fuse-${FUSE_VERSION}.tar.gz
-mv fuse-${FUSE_VERSION}/* src/
-rm -rf fuse-${FUSE_VERSION}
-cp ../m4/* src/m4/
-patch -N -p0 < fuse-drainout.patch
-cd ..
-
-cd kernel/redirfs
-tar xfz redirfs-${REDIRFS_VERSION}.tar.gz
-mv redirfs-${REDIRFS_VERSION}/* src/
-rm -rf redirfs-${REDIRFS_VERSION}
-patch -N -p0 < lchown.patch
 cd ../..
 
-cd jemalloc
-tar xfj jemalloc-${JEMALLOC_VERSION}.tar.bz2
-mv jemalloc-${JEMALLOC_VERSION}/* src/
-mv src/configure.ac src/configure.ac.vanilla
-touch src/configure.ac
-patch -N -p0 < jemalloc-2.2.1-64bit_literals.patch
-rm -rf jemalloc-${JEMALLOC_VERSION} 
-cd ..
+# CURL
+cd externals/libcurl
+tar xfz curl-${CURL_VERSION}.tar.gz 
+mkdir -p "$outOfSource/libcurl/src"
+mv curl-${CURL_VERSION}/* "$outOfSource/libcurl/src"
+cp src/* "$outOfSource/libcurl/src"
+rm -rf curl-${CURL_VERSION}
+cd ../..
 
-cd zlib
+# Zlib
+cd externals/zlib
 tar xfz zlib-${ZLIB_VERSION}.tar.gz
-mv zlib-${ZLIB_VERSION}/* src/
+mkdir -p "$outOfSource/zlib/src"
+mv zlib-${ZLIB_VERSION}/* "$outOfSource/zlib/src"
+cp src/* "$outOfSource/zlib/src"
 rm -rf zlib-${ZLIB_VERSION}
-cd ..
+cd ../..
 
-autoreconf -v
+# sqlite3
+cd externals/sqlite3
+mkdir -p "$outOfSource/sqlite3/src"
+cp src/* "$outOfSource/sqlite3/src"
+cd ../..
 
+# Murmur
+cd externals/murmur
+mkdir -p "$outOfSource/murmur/src"
+cp src/* "$outOfSource/murmur/src"
+cd ../..
+
+# google sparse hash
+cd externals/sparsehash
+tar xfz sparsehash-${SPARSEHASH_VERSION}.tar.gz 
+mkdir -p "$outOfSource/sparsehash/src"
+mv sparsehash-${SPARSEHASH_VERSION}/* "$outOfSource/sparsehash/src"
+cp src/* "$outOfSource/sparsehash/src"
+rm -rf sparsehash-${SPARSEHASH_VERSION}
+cd ../..
+
+# create a hint that bootstrapping is already done
+touch "$outOfSource/.decompressionDone"

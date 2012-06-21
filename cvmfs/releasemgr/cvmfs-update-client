@@ -43,7 +43,7 @@ fi
 if [ $SYNC == "true" ]; then
   echo "Pre-snapshot repository"
   timestamp=`date "+%Y%m%d%H%M%S"`
-  #ssh -l cvmfs $CVMFS_UPDATE_TARGET -- -c "Pre-sync-$timestamp"
+  ssh -l cvmfs $CVMFS_UPDATE_TARGET -- -c "Pre-sync-$timestamp"
   
   cvmfs-sync
   if [ "x$SIGN_CATALOG" == "xyes" ]; then
@@ -68,7 +68,7 @@ if [ $SYNC == "true" ]; then
     fi
   fi
 fi 
-#ssh -l cvmfs $CVMFS_UPDATE_TARGET -- $@
+ssh -l cvmfs $CVMFS_UPDATE_TARGET -- $@
 #if [ $SYNC == "true" ] && [ "x$CVMFS_APACHE_TARGET" != "x" ]; then
 #   echo Remounting CVMFS1 compatibility layer...
 #   sleep 10

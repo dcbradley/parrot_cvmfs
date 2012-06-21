@@ -9,7 +9,7 @@ STATE_DEPENDENT=4
 
 usage() {
   echo "check_cvmfs_whitelist <URL> <Warning period in days>"
-  echo "Example: ./check_cvmfs_whitelist.sh http://cernvm-webfs.cern.ch/opt/atlas/.cvmfswhitelist?v=2 4"  
+  echo "Example: ./check_cvmfs_whitelist.sh http://cernvm-webfs.cern.ch/opt/alice/.cvmfswhitelist?v=2 4"  
 }
 
 
