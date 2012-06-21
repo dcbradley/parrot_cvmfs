@@ -31,6 +31,32 @@ set (CVMFS2_DEBUG_SOURCES
 
 set (CVMFS2_SOURCES ${CVMFS2_DEBUG_SOURCES})
 
+set (LIBCVMFS_SOURCES
+	smalloc.h
+	logging.cc logging.h logging_internal.h
+	tracer.h tracer.cc atomic.h
+	duplex_sqlite3.h duplex_curl.h
+	signature.h signature.cc
+	quota.h quota.cc
+	hash.h hash.cc
+	cache.h cache.cc
+	talk.h talk.cc
+	platform.h platform_osx.h platform_linux.h
+	monitor.h monitor.cc
+	util.cc util.h
+	duplex_zlib.h compression.h compression.cc
+	download.cc download.h
+	lru.h lru.cc
+	globals.h globals.cc
+	peers.h peers.cc
+	catalog_queries.h catalog_queries.cc
+	catalog.h catalog.cc
+	catalog_mgr.h catalog_mgr.cc
+	shortstring.h dirent.h
+        libcvmfs_int.h libcvmfs_int.cc
+        libcvmfs.h libcvmfs.cc
+)
+
 set (CVMFS_FSCK_SOURCES
 	platform.h platform_linux.h platform_osx.h
   logging_internal.h logging.h logging.cc
@@ -208,6 +234,8 @@ if (BUILD_CVMFS)
 	add_executable (cvmfs2			${CVMFS2_SOURCES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE})
 	add_executable (cvmfs_fsck		${CVMFS_FSCK_SOURCES} ${ZLIB_ARCHIVE})
 
+	add_library (cvmfs STATIC ${LIBCVMFS_SOURCES})
+
 	if (LIBFUSE_BUILTIN)
 		add_dependencies (cvmfs2_debug libfuse) # here it does not matter if libfuse or libfuse4x
 		add_dependencies (cvmfs2 libfuse)       # at this point only the appropriate one is defined
@@ -216,31 +244,37 @@ if (BUILD_CVMFS)
 	if (LIBCURL_BUILTIN)
 		add_dependencies (cvmfs2_debug libcares libcurl)
 		add_dependencies (cvmfs2 libcares libcurl)
+		add_dependencies (cvmfs libcares libcurl)
 	endif (LIBCURL_BUILTIN)
 
 	if (SQLITE3_BUILTIN)
 		add_dependencies (cvmfs2_debug sqlite3)
 		add_dependencies (cvmfs2 sqlite3)
+		add_dependencies (cvmfs sqlite3)
 	endif (SQLITE3_BUILTIN)
 
 	if (ZLIB_BUILTIN)
 		add_dependencies (cvmfs2_debug zlib)
 		add_dependencies (cvmfs2 zlib)
 		add_dependencies (cvmfs_fsck zlib)
+		add_dependencies (cvmfs zlib)
 	endif (ZLIB_BUILTIN)
 
 	if (SPARSEHASH_BUILTIN)
 		add_dependencies (cvmfs2_debug sparsehash)
 		add_dependencies (cvmfs2 sparsehash)
+		add_dependencies (cvmfs sparsehash)
 	endif (SPARSEHASH_BUILTIN)
 
-  add_dependencies (cvmfs2_debug libmurmur)
-  add_dependencies (cvmfs2 libmurmur)
+  add_dependencies (cvmfs2_debug murmur)
+  add_dependencies (cvmfs2 murmur)
+  add_dependencies (cvmfs murmur)
 
 	# set some properties
 	set_target_properties (cvmfs2_debug PROPERTIES COMPILE_FLAGS "${CVMFS2_DEBUG_CFLAGS}" LINK_FLAGS "${CVMFS2_DEBUG_LD_FLAGS}")
 	set_target_properties (cvmfs2 PROPERTIES COMPILE_FLAGS "${CVMFS2_CFLAGS}" LINK_FLAGS "${CVMFS2_LD_FLAGS}")
 	set_target_properties (cvmfs_fsck PROPERTIES COMPILE_FLAGS "${CVMFS_FSCK_CFLAGS}" LINK_FLAGS "${CVMFS_FSCK_LD_FLAGS}")
+	set_target_properties (cvmfs PROPERTIES COMPILE_FLAGS "${CVMFS2_CFLAGS}")
 
 	# link the stuff (*_LIBRARIES are dynamic link libraries *_archive are static link libraries ... one of them will be empty for each dependency)
 	target_link_libraries (cvmfs2_debug		${CVMFS2_DEBUG_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARY} ${FUSE_LIBRARIES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread)
