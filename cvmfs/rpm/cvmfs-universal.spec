@@ -7,9 +7,9 @@
 
 Summary: CernVM File System
 Name: cvmfs
-Version: 2.0.12
+Version: 2.1.0
 Release: 1%{?dist}
-Source0: https://cernvm.cern.ch/project/trac/downloads/cernvm/%{name}-%{version}.tar.gz
+Source0: https://ecsft.cern.ch/dist/cvmfs/%{name}-%{version}.tar.gz
 %if 0%{?selinux_cvmfs}
 Source1: cvmfs.te
 %endif
@@ -17,6 +17,8 @@ Group: Applications/System
 License: BSD
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
+BuildRequires: cmake
+BuildRequires: fuse-devel
 BuildRequires: pkgconfig 
 BuildRequires: openssl-devel
 %{?el5:BuildRequires: buildsys-macros}
@@ -30,6 +32,7 @@ Requires: sudo
 Requires: psmisc
 Requires: autofs
 Requires: fuse
+Requires: fuse-libs
 Requires: curl
 Requires: attr 
 # Account for different package names
@@ -76,9 +79,11 @@ cp %{SOURCE1} SELinux
 
 %build
 %ifarch x86_64
-./configure --enable-sqlite3-builtin --enable-libcurl-builtin --enable-zlib-builtin --enable-mount-scripts --disable-server --prefix=/usr
+%cmake -DBUILD_SERVER=no .
 %else
-CFLAGS="-march=i686" CXXFLAGS="-march=i686" ./configure --enable-sqlite3-builtin --enable-libcurl-builtin --enable-zlib-builtin --enable-mount-scripts --disable-server --prefix=/usr
+export CFLAGS="-march=i686" 
+export CXXFLAGS="-march=i686"
+%cmake -DBUILD_SERVER=no .
 %endif
 make %{?_smp_mflags}
 
@@ -101,12 +106,12 @@ popd
   fi
   /usr/bin/getent passwd cvmfs >/dev/null
   if [ $? -ne 0 ]; then
-    /usr/sbin/useradd -r -g cvmfs -d /var/cache/cvmfs2 -s /sbin/nologin -c "CernVM-FS service account" cvmfs
+    /usr/sbin/useradd -r -g cvmfs -d /var/lib/cvmfs -s /sbin/nologin -c "CernVM-FS service account" cvmfs
   fi
 %else 
   /usr/bin/getent passwd cvmfs >/dev/null
   if [ $? -ne 0 ]; then
-     /usr/sbin/useradd -r -d /var/cache/cvmfs2 -s /sbin/nologin -c "CernVM-FS service account" cvmfs
+     /usr/sbin/useradd -r -d /var/lib/cvmfs -s /sbin/nologin -c "CernVM-FS service account" cvmfs
   fi
 
   # The useradd command will add a cvmfs group too - but we're in trouble if
@@ -126,8 +131,9 @@ fi
 rm -rf $RPM_BUILD_ROOT
 
 make DESTDIR=$RPM_BUILD_ROOT install
-mkdir -p $RPM_BUILD_ROOT/var/cache/cvmfs2
+mkdir -p $RPM_BUILD_ROOT/var/lib/cvmfs
 mkdir -p $RPM_BUILD_ROOT/cvmfs
+mkdir -p $RPM_BUILD_ROOT/etc/cvmfs/config.d
 
 # Keys are in cvmfs-keys
 rm -f $RPM_BUILD_ROOT/etc/cvmfs/keys/*
@@ -136,8 +142,6 @@ rm -f $RPM_BUILD_ROOT/etc/cvmfs/keys/*
 %if 0%{?suse_version}
 mkdir -p %RPM_BUILD_ROOT/usr/share/doc/package/%{name}
 mv $RPM_BUILD_ROOT/usr/share/doc/%{name}-%{version} %RPM_BUILD_ROOT/usr/share/doc/package/%{name}
-%else
-#FIX-PRERELEASE-DOCDIR
 %endif
 
 %if 0%{?selinux_cvmfs}
@@ -203,8 +207,7 @@ fi
 %defattr(-,root,root)
 %{_bindir}/cvmfs2
 %{_bindir}/cvmfs2_debug
-%{_bindir}/cvmfs_proxy_rtt
-%{_bindir}/cvmfs-talk
+%{_bindir}/cvmfs_talk
 %{_bindir}/cvmfs_fsck
 %{_bindir}/cvmfs_config
 %{_sysconfdir}/init.d/cvmfs
@@ -219,10 +222,10 @@ fi
 %dir %{_sysconfdir}/cvmfs/config.d
 %dir %{_sysconfdir}/cvmfs/domain.d
 %dir /cvmfs
-%attr(700,cvmfs,cvmfs) %dir /var/cache/cvmfs2
+%attr(700,cvmfs,cvmfs) %dir /var/lib/cvmfs
 %config %{_sysconfdir}/cvmfs/default.conf 
 %config %{_sysconfdir}/cvmfs/domain.d/cern.ch.conf
-%doc COPYING AUTHORS README NEWS ChangeLog FAQ
+%doc COPYING AUTHORS README ChangeLog
 
 %changelog
 * Mon Feb 20 2012 Jakob Blomer <jblomer@cern.ch>
@@ -233,6 +236,6 @@ fi
 - SuSE compatibility, disabled SELinux for SuSE
 * Wed Feb 15 2012 Jakob Blomer <jblomer@cern.ch>
 - Small adjustments to run with continueous integration
-* Thu Jan 12 2012 Brian Bockelman <bbockelm@cse.unl.edu> - 2.0.1
+* Thu Jan 12 2012 Brian Bockelman <bbockelm@cse.unl.edu> - 2.0.13
 - Addition of SELinux support.
 
