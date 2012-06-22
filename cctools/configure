@@ -603,11 +603,11 @@ else
 	fi
 fi
 
-if [ $config_cvmfs_path != no ] && check_file ${cvmfs_path}/cvmfs/src/libcvmfs.h
+if [ $config_cvmfs_path != no ] && check_file ${cvmfs_path}/cvmfs/libcvmfs.h
 then
-	ccflags="${ccflags} -I${cvmfs_path}/cvmfs/src -DHAS_CVMFS"
+	ccflags="${ccflags} -I${cvmfs_path}/install/include -DHAS_CVMFS"
 
-	for library in cvmfs/src/cvmfs sqlite3/src/sqlite3 libcurl/src/lib/.libs/curl c-ares/src/.libs/cares
+	for library in install/lib/cvmfs externals/sqlite3/src/sqlite3 externals/libcurl/src/lib/.libs/curl externals/c-ares/src/.libs/cares externals/murmur/src/murmur
 	do
 		lib_path=${cvmfs_path}/`dirname ${library}`
                 library=`basename ${library}`

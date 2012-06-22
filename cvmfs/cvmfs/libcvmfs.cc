@@ -500,6 +500,7 @@ int cvmfs_init(char const *options)
       cvmfs_opts.url,
       cvmfs_opts.proxies,
       cvmfs_opts.repo_name,
+      cvmfs_opts.mountpoint,
       cvmfs_opts.pubkey,
       cvmfs_opts.cachedir,
       false, /* cd_to_cachedir */

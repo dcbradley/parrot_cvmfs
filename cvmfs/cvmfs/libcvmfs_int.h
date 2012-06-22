@@ -46,6 +46,7 @@ int cvmfs_int_init(
   const std::string &cvmfs_opts_hostname, /* url of repository */
   const std::string &cvmfs_opts_proxies,
   const std::string &cvmfs_opts_repo_name,
+  const std::string &cvmfs_opts_mountpoint,
   const std::string &cvmfs_opts_pubkey,
   const std::string &cvmfs_opts_cachedir,
   bool cvmfs_opts_cd_to_cachedir,

@@ -32,37 +32,14 @@ diff -up cvmfs/cvmfs/src/cvmfs.cc cvmfs/cvmfs/src/cvmfs_common.cc
 To build:
 
 cd cvmfs
-
-cd jemalloc
-tar xvjf jemalloc-2.2.1.tar.bz2
-mkdir -p src
-mv jemalloc-2.2.1/* src/
-patch -p0 -i jemalloc-2.2.1-64bit_literals.patch
+cmake -DBUILD_SERVER=BOOL:OFF -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install .
+make install
 cd ..
 
-cd libcurl
-tar xvzf curl-7.21.3.tar.gz
-mv curl-7.21.3/* src/
-cd ..
-
-cd libfuse
-tar xvzf fuse-2.8.4.tar.gz
-mv fuse-2.8.4/* src/
-patch -p0 -i fuse-drainout.patch
-cd ..
-
-cd c-ares
-tar xvzf c-ares-1.7.5.tar.gz
-mv c-ares-1.7.5/* src/
-cd ..
-
-aclocal && autoheader && autoconf && automake
-./configure --disable-server --enable-sqlite3-builtin --enable-libcurl-builtin
-make
-
-cd ../cctools
+cd cctools
 ./configure --without-system-sand --without-system-allpairs --without-system-wavefront --without-system-makeflow --with-cvmfs-path `pwd`/../cvmfs
 make
+cd ..
 
 
 To test:

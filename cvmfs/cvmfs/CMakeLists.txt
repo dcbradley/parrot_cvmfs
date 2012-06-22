@@ -346,6 +346,17 @@ if (BUILD_CVMFS)
 		DESTINATION		bin
 		PERMISSIONS		OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 	)
+
+	install (
+		TARGETS			cvmfs
+		DESTINATION		lib
+	)
+
+	install (
+		FILES			libcvmfs.h
+		DESTINATION		include
+	)
+
 endif (BUILD_CVMFS)
 if (BUILD_SERVER)
 	install (

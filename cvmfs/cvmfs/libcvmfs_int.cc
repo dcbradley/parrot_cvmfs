@@ -279,6 +279,11 @@ static void RemountCheck() {
 static bool GetDirentForPath(const PathString &path,
                              catalog::DirectoryEntry *dirent)
 {
+  if( path.GetLength() == 1 && path.GetChars()[0] == '/' ) {
+    // root path is expected to be "", not "/"
+    PathString p;
+    return GetDirentForPath(p,dirent);
+  }
   hash::Md5 md5path(path.GetChars(), path.GetLength());
   if (md5path_cache_->Lookup(md5path, dirent))
     return dirent->GetSpecial() != catalog::kDirentNegative;
@@ -294,6 +299,37 @@ static bool GetDirentForPath(const PathString &path,
   return false;
 }
 
+/**
+ * Removes a file from local cache
+ * TODO
+ */
+int ClearFile(const string &path) {
+  /*  int attr_result = walk_path(path);
+   if (attr_result != 0)
+   return attr_result;
+
+   const hash::t_md5 md5(catalog::mangled_path(path));
+   int result;
+
+   catalog::lock();
+
+   catalog::t_dirent d;
+   if (catalog::lookup_informed_unprotected(md5, find_catalog_id(path), d)) {
+   if ((!(d.flags & catalog::FILE)) || (d.flags & catalog::FILE_LINK)) {
+   result = -EINVAL;
+   } else {
+   quota::remove(d.checksum);
+   result = 0;
+   }
+   } else {
+   result = -ENOENT;
+   }
+
+   catalog::unlock();
+
+   return result;*/
+  return 0;
+}
 
 /**
  * Do after-daemon() initialization
@@ -384,10 +420,11 @@ static bool running_created;
  * Off we go
  */
 
-int cvmfs_init(
+int cvmfs_int_init(
   const std::string &cvmfs_opts_hostname, /* url of repository */
   const std::string &cvmfs_opts_proxies,
   const std::string &cvmfs_opts_repo_name,
+  const std::string &cvmfs_opts_mountpoint,
   const std::string &cvmfs_opts_pubkey,
   const std::string &cvmfs_opts_cachedir,
   bool cvmfs_opts_cd_to_cachedir,
@@ -446,6 +483,7 @@ int cvmfs_init(
   SetupLibcryptoMt();
 
   // Fill cvmfs option variables from arguments
+  cvmfs::mountpoint_ = new string(cvmfs_opts_mountpoint);
   cvmfs::cachedir_ = new string(cvmfs_opts_cachedir);
   if (cvmfs_opts_cd_to_cachedir) {
     cvmfs::relative_cachedir = ".";
@@ -871,6 +909,11 @@ static void append_string_to_list(char const *str,char ***buf,size_t *listlen,si
 int cvmfs_listdir(const char *c_path,char ***buf,size_t *buflen)
 {
   LogCvmfs(kLogCvmfs, kLogDebug, "cvmfs_listdir on path: %s", c_path);
+
+  if( c_path[0] == '/' && c_path[1] == '\0' ) {
+    // root path is expected to be "", not "/"
+    c_path = "";
+  }
 
   PathString path;
   path.Assign(c_path, strlen(c_path));
