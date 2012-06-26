@@ -53,8 +53,6 @@ int cvmfs_int_init(
   int64_t cvmfs_opts_quota_limit,
   int64_t cvmfs_opts_quota_threshold,
   bool cvmfs_opts_rebuild_cachedb,
-  int cvmfs_opts_uid,
-  int cvmfs_opts_gid,
   unsigned cvmfs_opts_max_ttl,
   bool cvmfs_opts_ignore_signature,
   const std::string &cvmfs_opts_root_hash,
@@ -67,10 +65,7 @@ int cvmfs_int_init(
   const std::string &cvmfs_opts_blacklist,
   const std::string &cvmfs_opts_whitelist,
   int cvmfs_opts_nofiles,
-  bool cvmfs_opts_grab_mountpoint,
-  bool cvmfs_opts_enable_talk,
-  void (*cvmfs_opts_set_cache_drainout_fn)(),
-  void (*cvmfs_opts_unset_cache_drainout_fn)()
+  bool cvmfs_opts_enable_talk
 );
 
 void cvmfs_int_spawn();

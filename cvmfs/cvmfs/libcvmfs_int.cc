@@ -116,7 +116,7 @@ unsigned max_ttl_ = 0;
 pthread_mutex_t lock_max_ttl_ = PTHREAD_MUTEX_INITIALIZER;
 cache::CatalogManager *catalog_manager_;
 lru::Md5PathCache *md5path_cache_ = NULL;
-double kcache_timeout_ = 60.0;  /**< TTL (s) of meta data in the kernel cache */
+double kcache_timeout_ = 0.0;  /**< TTL (s) of meta data in the kernel cache (default to 0 in libcvmfs)*/
 atomic_int32 catalogs_expired_;
 atomic_int32 drainout_mode_;
 time_t drainout_deadline_;
@@ -158,12 +158,6 @@ static unsigned GetEffectiveTTL() {
   const unsigned catalog_ttl = catalog_manager_->GetTTL();
 
   return max_ttl ? std::min(max_ttl, catalog_ttl) : catalog_ttl;
-}
-
-
-static inline double GetKcacheTimeout() {
-  if (atomic_read32(&drainout_mode_)) return 0.0;
-  return kcache_timeout_;
 }
 
 
@@ -431,8 +425,6 @@ int cvmfs_int_init(
   int64_t cvmfs_opts_quota_limit,
   int64_t cvmfs_opts_quota_threshold,
   bool cvmfs_opts_rebuild_cachedb,
-  int cvmfs_opts_uid,
-  int cvmfs_opts_gid,
   unsigned cvmfs_opts_max_ttl,
   bool cvmfs_opts_ignore_signature,
   const std::string &cvmfs_opts_root_hash,
@@ -445,23 +437,8 @@ int cvmfs_int_init(
   const std::string &cvmfs_opts_blacklist,
   const std::string &cvmfs_opts_whitelist,
   int cvmfs_opts_nofiles,
-  bool cvmfs_opts_grab_mountpoint,
-  bool cvmfs_opts_enable_talk,
-  void (*cvmfs_opts_set_cache_drainout_fn)(),
-  void (*cvmfs_opts_unset_cache_drainout_fn)()
+  bool cvmfs_opts_enable_talk
 ) {
-
-#if DAN_TODO
-  // Jump into alternative process flavors
-  if (argc > 1) {
-    if (strcmp(argv[1], "__peersrv__") == 0) {
-      return peers::MainPeerServer(argc, argv);
-    }
-    if (strcmp(argv[1], "__cachemgr__") == 0) {
-      return quota::MainCacheManager(argc, argv);
-    }
-  }
-#endif
 
   int retval;
 
@@ -493,17 +470,9 @@ int cvmfs_int_init(
   }
   cvmfs::tracefile_ = new string(cvmfs_opts_tracefile);
   cvmfs::repository_name_ = new string(cvmfs_opts_repo_name);
-  g_uid = cvmfs_opts_uid ? cvmfs_opts_uid : getuid();
-  g_gid = cvmfs_opts_gid ? cvmfs_opts_gid : getgid();
+  g_uid = getuid();
+  g_gid = getgid();
   if (cvmfs_opts_max_ttl) cvmfs::max_ttl_ = cvmfs_opts_max_ttl*60;
-#if DAN_TODO
-  if (cvmfs_opts_kcache_timeout) {
-    cvmfs::kcache_timeout_ = (cvmfs_opts_kcache_timeout == -1) ?
-                             0.0 : double(cvmfs_opts_kcache_timeout);
-  }
-  LogCvmfs(kLogCvmfs, kLogDebug, "kernel caches expires after %d seconds",
-           int(cvmfs::kcache_timeout_));
-#endif
   options_ready = true;
 
   // Tune SQlite3 memory
@@ -555,42 +524,12 @@ int cvmfs_int_init(
     }
   }
 
-  // Grab mountpoint
-  if (cvmfs_opts_grab_mountpoint) {
-    if ((chown(cvmfs::mountpoint_->c_str(), g_uid, g_gid) != 0) ||
-        (chmod(cvmfs::mountpoint_->c_str(), 0755) != 0)) {
-      PrintError("Failed to grab mountpoint (" + StringifyInt(errno) + ")");
-      goto cvmfs_cleanup;
-    }
-  }
-
-  // Drop credentials
-  if ((g_uid != 0) || (g_gid != 0)) {
-    LogCvmfs(kLogCvmfs, kLogStdout, "CernVM-FS: running with credentials %d:%d",
-             g_uid, g_gid);
-    if ((setgid(g_gid) != 0) || (setuid(g_uid) != 0)) {
-      PrintError("Failed to drop credentials");
-      goto cvmfs_cleanup;
-    }
-  }
-
   // Create cache directory, if necessary
   if (!MkdirDeep(*cvmfs::cachedir_, 0700)) {
     PrintError("cannot create cache directory " + *cvmfs::cachedir_);
     goto cvmfs_cleanup;
   }
 
-#if DAN_TODO
-  // Spawn / connect to peer server
-  if (cvmfs_opts_diskless) {
-    if (!peers::Init(GetParentPath(*cvmfs::cachedir_), argv[0],
-                     cvmfs_opts_interface))
-    {
-      PrintError("failed to initialize peer socket");
-      goto cvmfs_cleanup;
-    }
-  }
-#endif
   peers_ready = true;
 
   // Try to jump to cache directory.  This tests, if it is accassible.
