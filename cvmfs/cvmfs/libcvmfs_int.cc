@@ -112,15 +112,9 @@ string *repository_name_ = NULL;  /**< Expected repository name,
                                        e.g. atlas.cern.ch */
 pid_t pid_ = 0;  /**< will be set after deamon() */
 time_t boot_time_;
-unsigned max_ttl_ = 0;
 pthread_mutex_t lock_max_ttl_ = PTHREAD_MUTEX_INITIALIZER;
 cache::CatalogManager *catalog_manager_;
 lru::Md5PathCache *md5path_cache_ = NULL;
-double kcache_timeout_ = 0.0;  /**< TTL (s) of meta data in the kernel cache (default to 0 in libcvmfs)*/
-atomic_int32 catalogs_expired_;
-atomic_int32 drainout_mode_;
-time_t drainout_deadline_;
-time_t catalogs_valid_until_;
 
 atomic_int64 num_fs_open_;
 atomic_int64 num_fs_dir_open_;
@@ -138,26 +132,11 @@ const int kNumReservedFd = 512;  /**< Number of reserved file descriptors for
 
 
 unsigned GetMaxTTL() {
-  pthread_mutex_lock(&lock_max_ttl_);
-  const unsigned current_max = max_ttl_/60;
-  pthread_mutex_unlock(&lock_max_ttl_);
-
-  return current_max;
+  return 0;
 }
 
 
 void SetMaxTTL(const unsigned value) {
-  pthread_mutex_lock(&lock_max_ttl_);
-  max_ttl_ = value*60;
-  pthread_mutex_unlock(&lock_max_ttl_);
-}
-
-
-static unsigned GetEffectiveTTL() {
-  const unsigned max_ttl = GetMaxTTL()*60;
-  const unsigned catalog_ttl = catalog_manager_->GetTTL();
-
-  return max_ttl ? std::min(max_ttl, catalog_ttl) : catalog_ttl;
 }
 
 
@@ -204,69 +183,26 @@ string GetFsStats() {
 
 
 /**
- * If there is a new catalog version, switches to drainout mode.
- * lookup or getattr will take care of actual remounting once the caches are
- * drained out.
+ * If there is a new catalog version, load it.
  */
 catalog::LoadError RemountStart() {
   catalog::LoadError retval = catalog_manager_->Remount(true);
   if (retval == catalog::kLoadNew) {
     LogCvmfs(kLogCvmfs, kLogDebug,
-             "new catalog revision available, draining out meta-data caches");
-    drainout_deadline_ = time(NULL) + int(kcache_timeout_);
-    atomic_cas32(&drainout_mode_, 0, 1);
-  }
-  return retval;
-}
+             "new catalog revision available");
 
-
-/**
- * If the cached are drained out, a new catalog revision is applied and
- * kernel caches are activated again.
- */
-static void RemountFinish() {
-  if (!atomic_cas32(&drainout_mode_, 1, 0))
-    return;
-
-  if (time(NULL) > drainout_deadline_) {
-    LogCvmfs(kLogCvmfs, kLogDebug, "caches drained out, applying new catalog");
+    LogCvmfs(kLogCvmfs, kLogDebug, "applying new catalog");
     md5path_cache_->Pause();
     md5path_cache_->Drop();
-    catalog::LoadError retval = catalog_manager_->Remount(false);
+    retval = catalog_manager_->Remount(false);
     md5path_cache_->Resume();
     if ((retval == catalog::kLoadFail) || (retval == catalog::kLoadNoSpace) ||
         catalog_manager_->offline_mode())
     {
-      LogCvmfs(kLogCvmfs, kLogDebug, "reload/finish failed, "
-               "applying short term TTL");
-      alarm(kShortTermTTL);
-      catalogs_valid_until_ = time(NULL) + kShortTermTTL;
-    } else {
-      alarm(GetEffectiveTTL());
-      catalogs_valid_until_ = time(NULL) + GetEffectiveTTL();
-    }
-  } else {
-    atomic_cas32(&drainout_mode_, 0, 1);
-  }
-}
-
-
-/**
- * Runs at the beginning of lookup, checks if a previously started remount needs
- * to be finished or starts a new remount if the TTL timer has been fired.
- */
-static void RemountCheck() {
-  RemountFinish();
-
-  if (atomic_cas32(&catalogs_expired_, 1, 0)) {
-    LogCvmfs(kLogCvmfs, kLogDebug, "catalog TTL expired, reload");
-    catalog::LoadError retval = RemountStart();
-    if ((retval == catalog::kLoadFail) || (retval == catalog::kLoadNoSpace)) {
-      LogCvmfs(kLogCvmfs, kLogDebug, "reload failed, applying short term TTL");
-      alarm(kShortTermTTL);
-      catalogs_valid_until_ = time(NULL) + kShortTermTTL;
+      LogCvmfs(kLogCvmfs, kLogDebug, "reload/finish failed");
     }
   }
+  return retval;
 }
 
 
@@ -342,7 +278,6 @@ void cvmfs_int_spawn() {
   else
     tracer::InitNull();
 
-  atomic_init32(&drainout_mode_);
 }
 
 }  // namespace cvmfs
@@ -425,7 +360,6 @@ int cvmfs_int_init(
   int64_t cvmfs_opts_quota_limit,
   int64_t cvmfs_opts_quota_threshold,
   bool cvmfs_opts_rebuild_cachedb,
-  unsigned cvmfs_opts_max_ttl,
   bool cvmfs_opts_ignore_signature,
   const std::string &cvmfs_opts_root_hash,
   unsigned cvmfs_opts_timeout,
@@ -472,7 +406,6 @@ int cvmfs_int_init(
   cvmfs::repository_name_ = new string(cvmfs_opts_repo_name);
   g_uid = getuid();
   g_gid = getgid();
-  if (cvmfs_opts_max_ttl) cvmfs::max_ttl_ = cvmfs_opts_max_ttl*60;
   options_ready = true;
 
   // Tune SQlite3 memory
@@ -662,10 +595,6 @@ int cvmfs_int_init(
   }
   catalog_ready = true;
 
-  // Setup catalog reload alarm
-  atomic_init32(&cvmfs::catalogs_expired_);
-  cvmfs::catalogs_valid_until_ = cvmfs::kIndefiniteDeadline;
-
   // Set fuse callbacks, remove url from arguments
   LogCvmfs(kLogCvmfs, kLogSyslog,
            "CernVM-FS: linking %s to repository %s",
@@ -673,7 +602,8 @@ int cvmfs_int_init(
 
   cvmfs::md5path_cache_ = new lru::Md5PathCache(cvmfs::kMd5pathCacheSize);
 
-   return 0;
+  cvmfs_int_spawn();
+  return 0;
 
 cvmfs_cleanup:
    cvmfs_int_fini();
@@ -779,7 +709,6 @@ int cvmfs_close(int fd)
 int cvmfs_getattr(const char *c_path, struct stat *info)
 {
   atomic_inc64(&num_fs_stat_);
-  RemountCheck();
 
   LogCvmfs(kLogCvmfs, kLogDebug, "cvmfs_getattr (stat) for path: %s", c_path);
 

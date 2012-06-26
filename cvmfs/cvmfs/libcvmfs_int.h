@@ -53,7 +53,6 @@ int cvmfs_int_init(
   int64_t cvmfs_opts_quota_limit,
   int64_t cvmfs_opts_quota_threshold,
   bool cvmfs_opts_rebuild_cachedb,
-  unsigned cvmfs_opts_max_ttl,
   bool cvmfs_opts_ignore_signature,
   const std::string &cvmfs_opts_root_hash,
   unsigned cvmfs_opts_timeout,

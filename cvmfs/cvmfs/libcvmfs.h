@@ -17,6 +17,11 @@ int cvmfs_init(char const *options);
  */
 void cvmfs_fini();
 
+/* Load a new catalog if there is one
+ * \return 0 on success
+ */
+int cvmfs_remount();
+
 /* Send syslog and debug messages to log_fn instead.  This may (and
  * probably should) be called before cvmfs_init().  Setting this to
  * NULL restores the default logging behavior.

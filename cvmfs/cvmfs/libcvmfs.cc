@@ -34,7 +34,6 @@ using namespace cvmfs;
 struct cvmfs_opts {
    unsigned timeout;
    unsigned timeout_direct;
-   unsigned max_ttl;
    string   url;
    string   cachedir;
    string   proxies;
@@ -56,7 +55,6 @@ struct cvmfs_opts {
    cvmfs_opts():
       timeout(2),
       timeout_direct(2),
-      max_ttl(0),
       cachedir("/var/cache/cvmfs2/default"),
       whitelist("/.cvmfswhitelist"),
       pubkey("/etc/cvmfs/keys/cern.ch.pub"),
@@ -124,7 +122,6 @@ struct cvmfs_opts {
       CVMFS_OPT(url);
       CVMFS_OPT(timeout);
       CVMFS_OPT(timeout_direct);
-      CVMFS_OPT(max_ttl);
       CVMFS_OPT(cachedir);
       CVMFS_OPT(proxies);
       CVMFS_OPT(tracefile);
@@ -218,7 +215,6 @@ struct cvmfs_opts {
             " url=REPOSITORY_URL      The URL of the CernVM-FS server(s): 'url1;url2;...'\n"
             " timeout=SECONDS         Timeout for network operations (default is %d)\n"
             " timeout_direct=SECONDS  Timeout for network operations without proxy (default is %d)\n"
-            " max_ttl=MINUTES         Maximum TTL for file catalogs (default: take from catalog)\n"
             " cachedir=DIR            Where to store disk cache\n"
             " proxies=HTTP_PROXIES    Set the HTTP proxy list, such as 'proxy1|proxy2;DIRECT'\n"
             " tracefile=FILE          Trace FUSE opaerations into FILE\n"
@@ -506,7 +502,6 @@ int cvmfs_init(char const *options)
       cvmfs_opts.quota_limit,
       cvmfs_opts.quota_threshold,
       cvmfs_opts.rebuild_cachedb,
-      cvmfs_opts.max_ttl,
       cvmfs_opts.allow_unsigned,
 	  "" /* root_hash */,
       cvmfs_opts.timeout,
@@ -523,8 +518,6 @@ int cvmfs_init(char const *options)
    if( rc != 0 ) {
        return -1;
    }
-
-   cvmfs_int_spawn();
 
    ::mountpoint = cvmfs_opts.mountpoint;
 
@@ -553,4 +546,13 @@ void cvmfs_set_log_fn( void (*log_fn)(const char *msg) )
 	else {
 		SetAltLogFunc( libcvmfs_log_fn );
 	}
+}
+
+int cvmfs_remount()
+{
+	catalog::LoadError retval = RemountStart();
+	if( retval == catalog::kLoadNew || retval == catalog::kLoadUp2Date) {
+		return 0;
+	}
+	return -1;
 }
