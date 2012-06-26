@@ -60,7 +60,7 @@ struct cvmfs_opts {
       cachedir("/var/cache/cvmfs2/default"),
       whitelist("/.cvmfswhitelist"),
       pubkey("/etc/cvmfs/keys/cern.ch.pub"),
-      blacklist("/etc/cvmfs/blacklist"),
+      blacklist(""),
       allow_unsigned(false),
       rebuild_cachedb(false),
       nofiles(0),
@@ -236,7 +236,6 @@ struct cvmfs_opts {
             " repo_name=<repository>  Unique name of the mounted repository, e.g. atlas.cern.ch\n"
             " mountpoint=<path>       Path to root of repository, e.g. /cvmfs/atlas.cern.ch\n"
             " blacklist=FILE          Local blacklist for invalid certificates.  Has precedence over the whitelist.\n"
-            "                         (Default is /etc/cvmfs/blacklist)\n"
             " syslog_level=NUMBER     Sets the level used for syslog to DEBUG (1), INFO (2), or NOTICE (3).\n"
             "                         Default is NOTICE.\n"
             " Note: you cannot load files greater than quota_limit-quota_threshold\n",
