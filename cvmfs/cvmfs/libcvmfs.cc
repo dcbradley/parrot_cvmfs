@@ -542,8 +542,21 @@ void cvmfs_fini() {
    ::mountpoint = "";
 }
 
+static void (*ext_log_fn)(const char *msg) = NULL;
+
+static void libcvmfs_log_fn(const LogSource /*source*/, const int /*mask*/, const char *msg) {
+	if( ext_log_fn ) {
+		(*ext_log_fn)(msg);
+	}
+}
+
 void cvmfs_set_log_fn( void (*log_fn)(const char *msg) )
 {
-	//TODO
-	//syslog_set_alt_logger( log_fn );
+	ext_log_fn = log_fn;
+	if( log_fn == NULL ) {
+		SetAltLogFunc( NULL );
+	}
+	else {
+		SetAltLogFunc( libcvmfs_log_fn );
+	}
 }
