@@ -261,25 +261,6 @@ int ClearFile(const string &path) {
   return 0;
 }
 
-/**
- * Do after-daemon() initialization
- */
-void cvmfs_int_spawn() {
-  LogCvmfs(kLogCvmfs, kLogDebug, "cvmfs_spawn");
-
-  pid_ = getpid();
-  monitor::Spawn();
-  download::Spawn();
-  quota::Spawn();
-  talk::Spawn();
-
-  if (*tracefile_ != "")
-    tracer::Init(8192, 7000, *tracefile_);
-  else
-    tracer::InitNull();
-
-}
-
 }  // namespace cvmfs
 
 
@@ -371,7 +352,8 @@ int cvmfs_int_init(
   const std::string &cvmfs_opts_blacklist,
   const std::string &cvmfs_opts_whitelist,
   int cvmfs_opts_nofiles,
-  bool cvmfs_opts_enable_talk
+  bool cvmfs_opts_enable_talk,
+  bool cvmfs_opts_enable_monitor
 ) {
 
   int retval;
@@ -537,22 +519,29 @@ int cvmfs_int_init(
   }
 
   // Monitor, check for maximum number of open files
-  if (!monitor::Init(relative_cachedir, true)) {
-    PrintError("failed to initialize watchdog.");
-    goto cvmfs_cleanup;
+  if (cvmfs_opts_enable_monitor) {
+    if (!monitor::Init(relative_cachedir, true)) {
+      PrintError("failed to initialize watchdog.");
+      goto cvmfs_cleanup;
+    }
+    cvmfs::max_open_files_ = monitor::GetMaxOpenFiles();
+    monitor_ready = true;
   }
-  cvmfs::max_open_files_ = monitor::GetMaxOpenFiles();
+  else {
+    cvmfs::max_open_files_ = 0;
+  }
   atomic_init32(&cvmfs::open_files_);
   atomic_init32(&cvmfs::open_dirs_);
-  monitor_ready = true;
 
   // Control & command interface
-  if (!talk::Init(relative_cachedir)) {
-    PrintError("failed to initialize talk socket (" + StringifyInt(errno) +
-               ")");
-    goto cvmfs_cleanup;
+  if (cvmfs_opts_enable_talk) {
+    if (!talk::Init(relative_cachedir)) {
+      PrintError("failed to initialize talk socket (" + StringifyInt(errno) +
+                 ")");
+      goto cvmfs_cleanup;
+    }
+    talk_ready = true;
   }
-  talk_ready = true;
 
   // Network initialization
   download::Init(16);
@@ -608,6 +597,29 @@ int cvmfs_int_init(
 cvmfs_cleanup:
    cvmfs_int_fini();
    return 1;
+}
+
+/**
+ * Do after-daemon() initialization
+ */
+void cvmfs_int_spawn() {
+  LogCvmfs(kLogCvmfs, kLogDebug, "cvmfs_spawn");
+
+  pid_ = getpid();
+  if (monitor_ready) {
+    monitor::Spawn();
+  }
+  download::Spawn();
+  quota::Spawn();
+  if (talk_ready) {
+    talk::Spawn();
+  }
+
+  if (*tracefile_ != "")
+    tracer::Init(8192, 7000, *tracefile_);
+  else
+    tracer::InitNull();
+
 }
 
 void cvmfs_int_fini() {

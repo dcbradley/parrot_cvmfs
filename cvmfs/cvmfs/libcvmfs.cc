@@ -513,7 +513,8 @@ int cvmfs_init(char const *options)
       cvmfs_opts.blacklist,
       cvmfs_opts.whitelist,
       cvmfs_opts.nofiles,
-      false  /* enable_talk */
+      false,  /* enable_talk */
+      false   /* enable_monitor */
    );
    if( rc != 0 ) {
        return -1;
