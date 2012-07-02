@@ -19,25 +19,16 @@ branch to the upstream branch:
 git diff upstream..master -- cctools
 git diff upstream..master -- cvmfs
 
-The code in cvmfs/cvmfs/src/cvmfs_common.cc is intended to
-be shared between the FUSE module and libcvmfs.  However,
-to avoid making large changes to the current CVMFS trunk,
-making cvmfs.cc depend on cvmfs_common.cc has been postponed
-for the future.  To see the small changes that were made
-to code copied from cvmfs.cc into cvmfs_common.cc:
-
-diff -up cvmfs/cvmfs/src/cvmfs.cc cvmfs/cvmfs/src/cvmfs_common.cc
-
 
 To build:
 
 cd cvmfs
-cmake -DBUILD_SERVER=BOOL:OFF -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install .
+cmake -DBUILD_SERVER:BOOL=OFF -DBUILD_CVMFS:BOOL=OFF -DBUILD_LIBCVMFS:BOOL=ON -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install .
 make install
 cd ..
 
 cd cctools
-./configure --without-system-sand --without-system-allpairs --without-system-wavefront --without-system-makeflow --with-cvmfs-path `pwd`/../cvmfs
+./configure --without-system-sand --without-system-allpairs --without-system-wavefront --without-system-makeflow --with-cvmfs-path `pwd`/../cvmfs/install
 make
 cd ..
 

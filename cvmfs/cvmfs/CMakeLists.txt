@@ -223,18 +223,18 @@ include_directories (${INCLUDE_DIRECTORIES})
 # variable to pass some target specific build options.
 #
 
-
-if (BUILD_CVMFS)
-
+if (BUILD_CVMFS OR BUILD_LIBCVMFS)
   include (${MURMUR_LOCATION}/CVMFS-CMakeLists.txt)
 	set (INCLUDE_DIRECTORIES ${INCLUDE_DIRECTORIES} ${MURMUR_LOCATION}/src)
+endif (BUILD_CVMFS OR BUILD_LIBCVMFS)
+
+if (BUILD_CVMFS)
 
 	# create targets with according sources and static link libraries
 	add_executable (cvmfs2_debug	${CVMFS2_DEBUG_SOURCES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE})
 	add_executable (cvmfs2			${CVMFS2_SOURCES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE})
 	add_executable (cvmfs_fsck		${CVMFS_FSCK_SOURCES} ${ZLIB_ARCHIVE})
 
-	add_library (cvmfs STATIC ${LIBCVMFS_SOURCES})
 
 	if (LIBFUSE_BUILTIN)
 		add_dependencies (cvmfs2_debug libfuse) # here it does not matter if libfuse or libfuse4x
@@ -244,44 +244,63 @@ if (BUILD_CVMFS)
 	if (LIBCURL_BUILTIN)
 		add_dependencies (cvmfs2_debug libcares libcurl)
 		add_dependencies (cvmfs2 libcares libcurl)
-		add_dependencies (cvmfs libcares libcurl)
 	endif (LIBCURL_BUILTIN)
 
 	if (SQLITE3_BUILTIN)
 		add_dependencies (cvmfs2_debug sqlite3)
 		add_dependencies (cvmfs2 sqlite3)
-		add_dependencies (cvmfs sqlite3)
 	endif (SQLITE3_BUILTIN)
 
 	if (ZLIB_BUILTIN)
 		add_dependencies (cvmfs2_debug zlib)
 		add_dependencies (cvmfs2 zlib)
 		add_dependencies (cvmfs_fsck zlib)
-		add_dependencies (cvmfs zlib)
 	endif (ZLIB_BUILTIN)
 
 	if (SPARSEHASH_BUILTIN)
 		add_dependencies (cvmfs2_debug sparsehash)
 		add_dependencies (cvmfs2 sparsehash)
-		add_dependencies (cvmfs sparsehash)
 	endif (SPARSEHASH_BUILTIN)
 
   add_dependencies (cvmfs2_debug murmur)
   add_dependencies (cvmfs2 murmur)
-  add_dependencies (cvmfs murmur)
 
 	# set some properties
 	set_target_properties (cvmfs2_debug PROPERTIES COMPILE_FLAGS "${CVMFS2_DEBUG_CFLAGS}" LINK_FLAGS "${CVMFS2_DEBUG_LD_FLAGS}")
 	set_target_properties (cvmfs2 PROPERTIES COMPILE_FLAGS "${CVMFS2_CFLAGS}" LINK_FLAGS "${CVMFS2_LD_FLAGS}")
 	set_target_properties (cvmfs_fsck PROPERTIES COMPILE_FLAGS "${CVMFS_FSCK_CFLAGS}" LINK_FLAGS "${CVMFS_FSCK_LD_FLAGS}")
-	set_target_properties (cvmfs PROPERTIES COMPILE_FLAGS "${CVMFS2_CFLAGS}")
 
 	# link the stuff (*_LIBRARIES are dynamic link libraries *_archive are static link libraries ... one of them will be empty for each dependency)
 	target_link_libraries (cvmfs2_debug		${CVMFS2_DEBUG_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARY} ${FUSE_LIBRARIES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread)
 	target_link_libraries (cvmfs2			${CVMFS2_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARY} ${FUSE_LIBRARIES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread)
 	target_link_libraries (cvmfs_fsck		${CVMFS_FSCK_LIBS} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_ARCHIVE} pthread)
 
+
 endif (BUILD_CVMFS)
+
+if (BUILD_LIBCVMFS)
+	add_library (cvmfs STATIC ${LIBCVMFS_SOURCES})
+
+	if (LIBCURL_BUILTIN)
+		add_dependencies (cvmfs libcares libcurl)
+	endif (LIBCURL_BUILTIN)
+
+	if (SQLITE3_BUILTIN)
+		add_dependencies (cvmfs sqlite3)
+	endif (SQLITE3_BUILTIN)
+
+	if (ZLIB_BUILTIN)
+		add_dependencies (cvmfs zlib)
+	endif (ZLIB_BUILTIN)
+
+	if (SPARSEHASH_BUILTIN)
+		add_dependencies (cvmfs sparsehash)
+	endif (SPARSEHASH_BUILTIN)
+
+  add_dependencies (cvmfs murmur)
+
+	set_target_properties (cvmfs PROPERTIES COMPILE_FLAGS "${CVMFS2_CFLAGS}")
+endif (BUILD_LIBCVMFS)
 
 if (BUILD_SERVER)
 
@@ -347,6 +366,9 @@ if (BUILD_CVMFS)
 		PERMISSIONS		OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 	)
 
+endif (BUILD_CVMFS)
+
+if (BUILD_LIBCVMFS)
 	install (
 		TARGETS			cvmfs
 		DESTINATION		lib
@@ -357,7 +379,40 @@ if (BUILD_CVMFS)
 		DESTINATION		include
 	)
 
-endif (BUILD_CVMFS)
+       if (LIBCURL_BUILTIN)
+               install (
+                       FILES           ${CARES_ARCHIVE} ${LIBCURL_ARCHIVE}
+                       DESTINATION     lib
+               )
+       endif (LIBCURL_BUILTIN)
+
+       if (SQLITE3_BUILTIN)
+               install (
+                       FILES           ${SQLITE3_ARCHIVE}
+                       DESTINATION     lib
+               )
+       endif (SQLITE3_BUILTIN)
+
+       if (ZLIB_BUILTIN)
+               install (
+                       FILES           ${ZLIB_ARCHIVE}
+                       DESTINATION     lib
+               )
+       endif (ZLIB_BUILTIN)
+
+       if (SPARSEHASH_BUILTIN)
+               install (
+                       FILES           ${SPARSEHASH_ARCHIVE}
+                       DESTINATION     lib
+               )
+       endif (SPARSEHASH_BUILTIN)
+
+       install (
+               FILES                   ${MURMUR_ARCHIVE}
+               DESTINATION             lib
+       )
+
+endif (BUILD_LIBCVMFS)
 if (BUILD_SERVER)
 	install (
 #		TARGETS			cvmfs_zpipe cvmfs_sign cvmfs_lscat cvmfs_pull cvmfs_scrub cvmfs_sync

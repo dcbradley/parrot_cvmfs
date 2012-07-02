@@ -603,11 +603,27 @@ else
 	fi
 fi
 
-if [ $config_cvmfs_path != no ] && check_file ${cvmfs_path}/cvmfs/libcvmfs.h
+if [ $config_cvmfs_path != no ] && check_file ${cvmfs_path}/include/libcvmfs.h
 then
-	ccflags="${ccflags} -I${cvmfs_path}/install/include -DHAS_CVMFS"
+	# this is the layout for cvmfs 2.1
+	ccflags="${ccflags} -I${cvmfs_path}/include -DHAS_CVMFS"
 
-	for library in install/lib/cvmfs externals/sqlite3/src/sqlite3 externals/libcurl/src/lib/.libs/curl externals/c-ares/src/.libs/cares externals/murmur/src/murmur
+	for library in lib/cvmfs lib/sqlite3 lib/curl lib/cares lib/murmur
+	do
+		lib_path=${cvmfs_path}/`dirname ${library}`
+                library=`basename ${library}`
+		if ! library_search $library ${lib_path}
+		then
+			echo "*** Couldn't find $library in ${lib_path}"
+			exit 1
+		fi
+	done
+elif [ $config_cvmfs_path != no ] && check_file ${cvmfs_path}/cvmfs/src/libcvmfs.h
+then
+	# this is the layout for cvmfs 2.0
+	ccflags="${ccflags} -I${cvmfs_path}/cvmfs/src -DHAS_CVMFS"
+
+	for library in cvmfs/src/cvmfs sqlite3/src/sqlite3 libcurl/src/lib/.libs/curl c-ares/src/.libs/cares
 	do
 		lib_path=${cvmfs_path}/`dirname ${library}`
                 library=`basename ${library}`
