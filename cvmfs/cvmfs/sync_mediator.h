@@ -36,12 +36,15 @@
 #include "cvmfs_sync.h"
 #include "sync_item.h"
 
+class Manifest;
+
 namespace publish {
 
 /**
- *  If we encounter a file with linkcount > 1 it will be added to a HardlinkGroup
- *  After processing all files, the HardlinkGroups are populated with related hardlinks
- *  Assertion: linkcount == HardlinkGroup::hardlinks.size() at the end!!
+ * If we encounter a file with linkcount > 1 it will be added to a HardlinkGroup
+ * After processing all files, the HardlinkGroups are populated with 
+ * related hardlinks
+ * Assertion: linkcount == HardlinkGroup::hardlinks.size() at the end!!
  */
 
 struct HardlinkGroup {
@@ -98,15 +101,10 @@ private:
 	 *  the queues will processed en bloc (for parallelization purposes) and afterwards added
 	 */
   pthread_mutex_t lock_file_queue_;
-  uint64_t num_files_process;
 	SyncItemList mFileQueue;
 	HardlinkGroupList mHardlinkQueue;
-  pthread_t thread_receive_;
 
 	const SyncParameters *params_;
-  int pipe_fanout_;
-  int pipe_hashes_;
-
 public:
 	SyncMediator(catalog::WritableCatalogManager *catalogManager,
 	             const SyncParameters *params);
@@ -155,7 +153,7 @@ public:
 	 *  do any pending processing and commit all changes to the catalogs
 	 *  to be called AFTER all recursions are finished
 	 */
-	void Commit();
+	Manifest *Commit();
 
 private:
   // -------------------------------------------------------------
@@ -203,12 +201,6 @@ private:
 
 	void CreateNestedCatalog(SyncItem &requestFile);
 	void RemoveNestedCatalog(SyncItem &requestFile);
-
-	void CompressAndHashFileQueue();
-	void AddFileQueueToCatalogs();
-
-	inline bool AddFileToDatastore(SyncItem &entry, hash::Any &hash) { return AddFileToDatastore(entry, "", hash); }
-	bool AddFileToDatastore(SyncItem &entry, const std::string &suffix, hash::Any &hash);
 
 	inline HardlinkGroupMap& GetHardlinkMap() { return mHardlinkStack.top(); }
 
