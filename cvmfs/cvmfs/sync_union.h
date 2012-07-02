@@ -33,7 +33,6 @@
 #include <string>
 #include <set>
 
-
 namespace publish {
 
 class SyncItem;
@@ -63,7 +62,7 @@ class SyncUnion {
 	/**
 	 * Main routine, process scratch space
 	 */
-	virtual bool Traverse() = 0;
+	virtual void Traverse() = 0;
 
 	inline std::string rdonly_path() const { return rdonly_path_; }
 	inline std::string union_path() const { return union_path_; }
@@ -168,7 +167,7 @@ class SyncUnionAufs : public SyncUnion {
   	            const std::string &union_path,
                 const std::string &scratch_path);
 
-	bool Traverse();
+	void Traverse();
 
  protected:
 	bool IsWhiteoutEntry(const SyncItem &entry) const;

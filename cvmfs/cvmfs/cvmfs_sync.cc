@@ -21,7 +21,10 @@
 #include "cvmfs_config.h"
 #include "cvmfs_sync.h"
 
+#include <fcntl.h>
+
 #include <cstdlib>
+#include <cstdio>
 
 #include <string>
 
@@ -33,6 +36,7 @@
 #include "logging.h"
 #include "monitor.h"
 #include "download.h"
+#include "manifest.h"
 
 using namespace std;  // NOLINT
 
@@ -42,14 +46,12 @@ static void Usage() {
     "Version %s\n"
     "Usage (normally called from cvmfs_server):\n"
     "  cvmfs_sync -u <union volume> -s <scratch directory> -c <r/o volume>\n"
-    "             -t <temporary storage> -b <base hash> -r <upstream storage>\n"
-    "             -w <stratum 0 base url>\n"
-    "             -n(new, requires only -t and -u)\n"
-    "             [-p(rint change set)] [-d(ry run)] [-m(ucatalogs)\n"
-    "             [EXPERIMENTAL: -n new -x paths_out (pipe)  -y hashes_in (pipe) -z (compress locally)]\n\n"
-    "  Upstream storage might be:\n"
-    "    local:<local path>\n"
-    "    pipe:<pipe for the cvmfs distributed backend>\n\n",       
+    "             -t <temporary storage> -b <base hash>\n"
+    "             -w <stratum 0 base url> -o <manifest output>\n"
+    "             -p <paths_out (pipe)> -d <digests_in (pipe)>\n"
+    "             [-l(ocal spooler) <local upstream path>]\n"
+    "             [-n(new, requires only -t, -u, -o, -p, and -d)]\n"
+    "             [-x (print change set)] [-y (dry run)] [-m(ucatalogs)\n\n",       
     VERSION);
 }
 
@@ -64,7 +66,7 @@ bool ParseParams(int argc, char **argv, SyncParameters *params) {
 
 	// Parse the parameters
 	char c;
-	while ((c = getopt(argc, argv, "u:s:c:t:b:r:w:pdmnx:y:z")) != -1) {
+	while ((c = getopt(argc, argv, "u:s:c:t:b:w:o:p:d:l:nxym")) != -1) {
 		switch (c) {
       // Directories
       case 'u':
@@ -84,38 +86,35 @@ bool ParseParams(int argc, char **argv, SyncParameters *params) {
       case 'b':
         params->base_hash = optarg;
         break;
-      case 'r':
-        params->forklift = upload::CreateForklift(optarg);
-        if (!params->forklift) {
-          Usage();
-          return false;
-        }
+      case 'o':
+        params->manifest_path = optarg;
         break;
       case 'w':
         params->stratum0 = optarg;
         break;
-      case 'x':
+      case 'p':
         params->paths_out = optarg;
         break;
-      case 'y':
-        params->hashes_in = optarg;
+      case 'd':
+        params->digests_in = optarg;
+        break;
+      case 'l':
+        params->local_spooler = true;
+        params->local_upstream = optarg;
         break;
 
       // Switches
-      case 'p':
+      case 'n':
+        params->new_repository = true;
+        break;
+      case 'x':
         params->print_changeset = true;
         break;
-      case 'd':
+      case 'y':
         params->dry_run = true;
         break;
       case 'm':
         params->mucatalogs = true;
-        break;
-      case 'z':
-        params->process_locally = true;
-        break;
-      case 'n':
-        params->new_repository = true;
         break;
 
       case '?':
@@ -149,13 +148,8 @@ bool CheckParams(SyncParameters *p) {
     }
   }
   
-  if (!p->forklift) {
-    PrintError("no upstream storage defined");
-    return false;
-  }
-  if (!p->forklift->Connect()) {
-    PrintError("failed to connect to upstream storage (" + 
-               p->forklift->GetLastError() + ")");
+  if (p->manifest_path == "") {
+    PrintError("manifest output required");
     return false;
   }
   if (!DirectoryExists(p->dir_temp)) {
@@ -180,35 +174,65 @@ int main(int argc, char **argv) {
 	// Initialization
 	if (!ParseParams(argc, argv, &params)) return 1;
 	if (!CheckParams(&params)) return 2;
-   
+  
+  // Optionally start the local "mini spooler"
+  if (params.local_spooler) {
+    int pid = fork();
+    assert(pid >= 0);
+    if (pid == 0) {
+      return upload::MainLocalSpooler(params.paths_out, params.digests_in, 
+                                      params.local_upstream);
+    }
+  }
+  
+  // Connect to the spooler
+  params.spooler = new upload::Spooler(params.paths_out, params.digests_in);
+  bool retval = params.spooler->Connect();
+  if (!retval) {
+    PrintError("Failed to connect to spooler");
+    return 1;
+  }
+  
+  // Create a new root hash.  As a side effect, upload new files and catalogs.
+  Manifest *manifest = NULL;
   if (params.new_repository) {
-    bool retval = 
+    manifest = 
       catalog::WritableCatalogManager::CreateRepository(params.dir_temp,
-                                                        *params.forklift);
-    if (!retval) {
+                                                        params.spooler);
+    if (!manifest) {
       PrintError("Failed to create new repository");
       return 1;
     }
-    return 0;
-  }
+  } else {
+    monitor::Spawn();
+    download::Init(1);
   
-  monitor::Spawn();
-  download::Init(1);
-  
-  catalog::WritableCatalogManager 
-    catalog_manager(hash::Any(hash::kSha1, hash::HexPtr(params.base_hash)),
-                    params.stratum0, params.dir_temp, params.forklift);
-  publish::SyncMediator mediator(&catalog_manager, &params);
-  publish::SyncUnionAufs sync(&mediator, params.dir_rdonly, params.dir_union,
-                              params.dir_scratch);
+    catalog::WritableCatalogManager 
+      catalog_manager(hash::Any(hash::kSha1, hash::HexPtr(params.base_hash)),
+                      params.stratum0, params.dir_temp, params.spooler);
+    publish::SyncMediator mediator(&catalog_manager, &params);
+    publish::SyncUnionAufs sync(&mediator, params.dir_rdonly, params.dir_union,
+                                params.dir_scratch);
 
-  if (!sync.Traverse()) {
-    PrintError("something went wrong during sync");
-    return 4;
+    sync.Traverse();
+    manifest = mediator.Commit();
+
+    download::Fini();
+    monitor::Fini();
+    
+    if (!manifest) {
+      PrintError("something went wrong during sync");
+      return 4;
+    }
   }
   
-  download::Fini();
-  monitor::Fini();
+  delete params.spooler;
+  
+  if (!manifest->Export(params.manifest_path)) {
+    PrintError("Failed to create new repository");
+    return 5;
+  }
+  delete manifest;
 
 	return 0;
 }
