@@ -1,5 +1,8 @@
 /**
  * This file is part of the CernVM File System.
+ *
+ * This is the internal implementation of libcvmfs,
+ * not to be exposed to the code using the library.
  */
 
 #ifndef CVMFS_CVMFS_H_

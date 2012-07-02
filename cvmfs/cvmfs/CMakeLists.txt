@@ -234,7 +234,6 @@ if (BUILD_CVMFS)
 	add_executable (cvmfs2			${CVMFS2_SOURCES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE})
 	add_executable (cvmfs_fsck		${CVMFS_FSCK_SOURCES} ${ZLIB_ARCHIVE})
 
-
 	if (LIBFUSE_BUILTIN)
 		add_dependencies (cvmfs2_debug libfuse) # here it does not matter if libfuse or libfuse4x
 		add_dependencies (cvmfs2 libfuse)       # at this point only the appropriate one is defined
@@ -261,8 +260,8 @@ if (BUILD_CVMFS)
 		add_dependencies (cvmfs2 sparsehash)
 	endif (SPARSEHASH_BUILTIN)
 
-  add_dependencies (cvmfs2_debug murmur)
-  add_dependencies (cvmfs2 murmur)
+  add_dependencies (cvmfs2_debug libmurmur)
+  add_dependencies (cvmfs2 libmurmur)
 
 	# set some properties
 	set_target_properties (cvmfs2_debug PROPERTIES COMPILE_FLAGS "${CVMFS2_DEBUG_CFLAGS}" LINK_FLAGS "${CVMFS2_DEBUG_LD_FLAGS}")
@@ -273,7 +272,6 @@ if (BUILD_CVMFS)
 	target_link_libraries (cvmfs2_debug		${CVMFS2_DEBUG_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARY} ${FUSE_LIBRARIES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread)
 	target_link_libraries (cvmfs2			${CVMFS2_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARY} ${FUSE_LIBRARIES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread)
 	target_link_libraries (cvmfs_fsck		${CVMFS_FSCK_LIBS} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_ARCHIVE} pthread)
-
 
 endif (BUILD_CVMFS)
 

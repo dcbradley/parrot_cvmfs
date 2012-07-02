@@ -14,8 +14,11 @@
  * Any HTTP server should do the job.  We use Apache + Squid.  Serving
  * files from the memory of a web proxy brings a significant performance
  * improvement.
+ *
+ * This is the internal implementation of libcvmfs, not to be exposed
+ * to the code using the library.  This code is based heavily on the
+ * fuse module cvmfs.cc.
  */
-// TODO: ndownload into cache
 
 #define ENOATTR ENODATA  /**< instead of including attr/xattr.h */
 
@@ -231,33 +234,9 @@ static bool GetDirentForPath(const PathString &path,
 
 /**
  * Removes a file from local cache
- * TODO
  */
 int ClearFile(const string &path) {
-  /*  int attr_result = walk_path(path);
-   if (attr_result != 0)
-   return attr_result;
-
-   const hash::t_md5 md5(catalog::mangled_path(path));
-   int result;
-
-   catalog::lock();
-
-   catalog::t_dirent d;
-   if (catalog::lookup_informed_unprotected(md5, find_catalog_id(path), d)) {
-   if ((!(d.flags & catalog::FILE)) || (d.flags & catalog::FILE_LINK)) {
-   result = -EINVAL;
-   } else {
-   quota::remove(d.checksum);
-   result = 0;
-   }
-   } else {
-   result = -ENOENT;
-   }
-
-   catalog::unlock();
-
-   return result;*/
+	// not implemented, but required for linking
   return 0;
 }
 
