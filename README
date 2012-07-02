@@ -13,11 +13,11 @@ The following versions are currently used:
 cvmfs git repo 886c7c67cb0d (2.1 dev branch)
 cctools trunk r2147
 
-To see the development that has been done, compare the master
-branch to the upstream branch:
+To see the development that has been done, compare the cvmfs2_1
+branch to the upstream cvmfs2_1 branch:
 
-git diff upstream..master -- cctools
-git diff upstream..master -- cvmfs
+git diff upstream_cvmfs2_1..cvmfs2_1 -- cctools
+git diff upstream_cvmfs2_1..cvmfs2_1 -- cvmfs
 
 
 To build:
