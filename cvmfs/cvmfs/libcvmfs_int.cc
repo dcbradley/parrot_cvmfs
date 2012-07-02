@@ -455,14 +455,14 @@ int cvmfs_int_init(
   }
 
   // Create lock file and running sentinel
-  fd_lockfile = LockFile("lock." + *cvmfs::repository_name_);
+  fd_lockfile = LockFile(relative_cachedir + "/lock." + *cvmfs::repository_name_);
   if (fd_lockfile < 0) {
     PrintError("could not acquire lock (" + StringifyInt(errno) + ")");
     goto cvmfs_cleanup;
   }
   {
     platform_stat64 info;
-    if (platform_stat(("running." + *cvmfs::repository_name_).c_str(),
+    if (platform_stat((relative_cachedir + "/running." + *cvmfs::repository_name_).c_str(),
                       &info) == 0)
     {
       LogCvmfs(kLogCvmfs, kLogDebug | kLogSyslog, "looks like cvmfs has been "
@@ -470,7 +470,7 @@ int cvmfs_int_init(
       cvmfs_opts_rebuild_cachedb = 1;
     }
   }
-  retval = open(("running." + *cvmfs::repository_name_).c_str(),
+  retval = open((relative_cachedir + "/running." + *cvmfs::repository_name_).c_str(),
                 O_RDONLY | O_CREAT, 0600);
   if (retval < 0) {
     PrintError("could not open running sentinel (" + StringifyInt(errno) + ")");
@@ -636,7 +636,7 @@ void cvmfs_int_fini() {
   if (monitor_ready) monitor::Fini();
   if (quota_ready) quota::Fini();
   if (cache_ready) cache::Fini();
-  if (running_created) unlink(("running." + *cvmfs::repository_name_).c_str());
+  if (running_created) unlink((relative_cachedir + "/running." + *cvmfs::repository_name_).c_str());
   if (fd_lockfile >= 0) UnlockFile(fd_lockfile);
   if (peers_ready) peers::Fini();
   tracer::Fini();
