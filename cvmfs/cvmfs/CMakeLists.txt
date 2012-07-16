@@ -3,8 +3,8 @@
 # executables in this directory
 #
 
-set (CVMFS2_DEBUG_SOURCES
-	smalloc.h
+set (CVMFS_CLIENT_SOURCES
+  smalloc.h
 	logging.cc logging.h logging_internal.h
 	tracer.h tracer.cc atomic.h
 	duplex_sqlite3.h duplex_curl.h
@@ -25,11 +25,24 @@ set (CVMFS2_DEBUG_SOURCES
 	catalog.h catalog.cc
 	catalog_mgr.h catalog_mgr.cc
 	shortstring.h dirent.h
+)
 
+set (CVMFS2_DEBUG_SOURCES
+  ${CVMFS_CLIENT_SOURCES}
+
+  nfs_maps.h nfs_maps.cc
   cvmfs.h cvmfs.cc
 )
 
-set (CVMFS2_SOURCES ${CVMFS2_DEBUG_SOURCES})
+set (CVMFS2_SOURCES
+  ${CVMFS2_DEBUG_SOURCES}
+)
+
+set (LIBCVMFS_SOURCES
+  ${CVMFS_CLIENT_SOURCES}
+  libcvmfs_int.h libcvmfs_int.cc
+  libcvmfs.h libcvmfs.cc
+)
 
 set (LIBCVMFS_SOURCES
 	smalloc.h
@@ -108,7 +121,7 @@ set (CVMFS_SIGN_SOURCES
   upload.h upload.cc
 	hash.cc hash.h
 	util.h util.cc
-	signature.cc signature.h 
+	signature.cc signature.h
   manifest.h manifest.cc
   cvmfs_sign.cc)
 
@@ -197,6 +210,14 @@ else (SPARSEHASH_BUILTIN)
 	set (INCLUDE_DIRECTORIES ${INCLUDE_DIRECTORIES} ${SPARSEHASH_INCLUDE_DIR})
 endif (SPARSEHASH_BUILTIN)
 
+if (LEVELDB_BUILTIN)
+	include (${LEVELDB_BUILTIN_LOCATION}/CVMFS-CMakeLists.txt)
+	set (INCLUDE_DIRECTORIES ${INCLUDE_DIRECTORIES} ${LEVELDB_BUILTIN_LOCATION}/src)
+else (LEVELDB_BUILTIN)
+  find_package(leveldb)
+	set (INCLUDE_DIRECTORIES ${INCLUDE_DIRECTORIES} ${LEVELDB_INCLUDE_DIR})
+endif (LEVELDB_BUILTIN)
+
 if (NOT MACOSX)
 	set (HAVE_LIB_RT TRUE)
 	set (RT_LIBRARY "rt")
@@ -260,6 +281,11 @@ if (BUILD_CVMFS)
 		add_dependencies (cvmfs2 sparsehash)
 	endif (SPARSEHASH_BUILTIN)
 
+  if (LEVELDB_BUILTIN)
+		add_dependencies (cvmfs2_debug libleveldb)
+		add_dependencies (cvmfs2 libleveldb)
+	endif (LEVELDB_BUILTIN)
+
   add_dependencies (cvmfs2_debug libmurmur)
   add_dependencies (cvmfs2 libmurmur)
 
@@ -269,8 +295,8 @@ if (BUILD_CVMFS)
 	set_target_properties (cvmfs_fsck PROPERTIES COMPILE_FLAGS "${CVMFS_FSCK_CFLAGS}" LINK_FLAGS "${CVMFS_FSCK_LD_FLAGS}")
 
 	# link the stuff (*_LIBRARIES are dynamic link libraries *_archive are static link libraries ... one of them will be empty for each dependency)
-	target_link_libraries (cvmfs2_debug		${CVMFS2_DEBUG_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARY} ${FUSE_LIBRARIES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread)
-	target_link_libraries (cvmfs2			${CVMFS2_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARY} ${FUSE_LIBRARIES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread)
+	target_link_libraries (cvmfs2_debug		${CVMFS2_DEBUG_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${LEVELDB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARY} ${FUSE_LIBRARIES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${LEVELDB_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread -ldl -lrt)
+	target_link_libraries (cvmfs2			${CVMFS2_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${LEVELDB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARY} ${FUSE_LIBRARIES} ${LIBFUSE_ARCHIVE} ${SQLITE3_ARCHIVE} ${MURMUR_ARCHIVE} ${LIBCURL_ARCHIVE} ${LEVELDB_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread -ldl -lrt)
 	target_link_libraries (cvmfs_fsck		${CVMFS_FSCK_LIBS} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_ARCHIVE} pthread)
 
 endif (BUILD_CVMFS)
@@ -342,7 +368,7 @@ if (BUILD_SERVER)
 #	target_link_libraries (cvmfs_scrub		${CVMFS_SCRUB_LIBS} ${OPENSSL_LIBRARIES})
 	target_link_libraries (cvmfs_sign		${CVMFS_SIGN_LIBS} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_ARCHIVE} pthread)
 	target_link_libraries (cvmfs_zpipe		${CVMFS_ZPIPE_LIBS} ${ZLIB_LIBRARIES} ${ZLIB_ARCHIVE})
-	target_link_libraries (cvmfs_sync	${CVMFS_SYNC_BIN_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES}  ${RT_LIBRARY} ${SQLITE3_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread)
+	target_link_libraries (cvmfs_sync	${CVMFS_SYNC_BIN_LIBS} ${SQLITE3_LIBRARY} ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENSSL_LIBRARIES}  ${RT_LIBRARY} ${SQLITE3_ARCHIVE} ${LIBCURL_ARCHIVE} ${CARES_ARCHIVE} ${ZLIB_ARCHIVE} pthread -lrt)
 endif (BUILD_SERVER)
 
 #

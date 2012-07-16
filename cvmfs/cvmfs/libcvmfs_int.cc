@@ -477,7 +477,7 @@ int cvmfs_int_init(
   }
   if (!quota::Init(relative_cachedir, (uint64_t)cvmfs_opts_quota_limit,
                    (uint64_t)cvmfs_opts_quota_threshold,
-                   cvmfs_opts_rebuild_cachedb)) 
+                   cvmfs_opts_rebuild_cachedb))
   {
     PrintError("Failed to initialize lru cache");
     goto cvmfs_cleanup;

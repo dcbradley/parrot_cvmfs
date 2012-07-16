@@ -1,9 +1,14 @@
-#ifndef LIBCVMFS_H
-#define LIBCVMFS_H 1
+/**
+ * This file is part of the CernVM File System.
+ */
+
+#ifndef CVMFS_LIBCVMFS_H_
+#define CVMFS_LIBCVMFS_H_ 1
 
 extern "C" {
 
-/* Initialize the CVMFS library and attach the specified remote
+/**
+ * Initialize the CVMFS library and attach the specified remote
  * repository.
  *
  * See libcvmfs usage() for possible options.
@@ -13,7 +18,8 @@ extern "C" {
  */
 int cvmfs_init(char const *options);
 
-/* Shut down the CVMFS library and release all resources.
+/**
+ * Shut down the CVMFS library and release all resources.
  */
 void cvmfs_fini();
 
@@ -89,4 +95,4 @@ int cvmfs_listdir(const char *path,char ***buf,size_t *buflen);
 
 }
 
-#endif
+#endif  // CVMFS_LIBCVMFS_H_

@@ -36,13 +36,15 @@ pthread_mutex_t lock_stderr = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t lock_debug = PTHREAD_MUTEX_INITIALIZER;
 FILE *file_debug = NULL;
 string *path_debug = NULL;
+#endif
 const char *module_names[] = { "unknown", "cache", "catalog", "sql", "cvmfs",
   "hash", "download", "compress", "quota", "talk", "monitor", "lru",
-  "fuse stub", "signature", "peers" };
-#endif
+  "fuse stub", "signature", "peers", "fs traversal", "nfs maps" };
 int syslog_level = LOG_NOTICE;
 char *syslog_prefix = NULL;
-static void (*alt_log_func)(const LogSource source, const int mask, const char *msg) = NULL;
+LogLevels min_log_level = kLogNormal;
+static void (*alt_log_func)(const LogSource source, const int mask,
+                            const char *msg) = NULL;
 
 }  // namespace
 
@@ -88,6 +90,14 @@ void SetLogSyslogPrefix(const std::string &prefix) {
 
 
 /**
+ * Set the minimum verbosity level.  By default kLogNormal.
+ */
+void SetLogVerbosity(const LogLevels min_level) {
+  min_log_level = min_level;
+}
+
+
+/**
  * Changes the debug log file from stderr. No effect if DEBUGMSG is undefined.
  */
 #ifdef DEBUGMSG
@@ -121,6 +131,12 @@ void SetAltLogFunc( void (*fn)(const LogSource source, const int mask, const cha
   alt_log_func = fn;
 }
 
+void SetAltLogFunc(void (*fn)(const LogSource source, const int mask,
+                              const char *msg))
+{
+  alt_log_func = fn;
+}
+
 /**
  * Logs a message to one or multiple facilities specified by mask.
  * Mask can be extended by a log level in the future, using the higher bits.
@@ -133,14 +149,21 @@ void LogCvmfs(const LogSource source, const int mask, const char *format, ...) {
   char *msg = NULL;
   va_list variadic_list;
 
+  // Log level check, no flag set in mask means kLogNormal
+  int log_level = mask & ((2*kLogNone - 1) ^ (kLogLevel0 - 1));
+  if (!log_level)
+    log_level = kLogNormal;
+  if (log_level < min_log_level)
+    return;
+
   // Format the message string
   va_start(variadic_list, format);
   vasprintf(&msg, format, variadic_list);
   assert(msg != NULL);  // else: out of memory
   va_end(variadic_list);
 
-  if( alt_log_func ) {
-    (*alt_log_func)(source,mask,msg);
+  if (alt_log_func) {
+    (*alt_log_func)(source, mask, msg);
     return;
   }
 
@@ -172,6 +195,8 @@ void LogCvmfs(const LogSource source, const int mask, const char *format, ...) {
 
   if (mask & kLogStdout) {
     pthread_mutex_lock(&lock_stdout);
+    if (mask & kLogShowSource)
+      printf("(%s) ", module_names[source]);
     printf("%s", msg);
     if (!(mask & kLogNoLinebreak))
       printf("\n");
@@ -182,6 +207,8 @@ void LogCvmfs(const LogSource source, const int mask, const char *format, ...) {
 
   if (mask & kLogStderr) {
     pthread_mutex_lock(&lock_stderr);
+    if (mask & kLogShowSource)
+      printf("(%s) ", module_names[source]);
     fprintf(stderr, "%s", msg);
     if (!(mask & kLogNoLinebreak))
       printf("\n");
