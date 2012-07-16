@@ -127,9 +127,6 @@ string GetLogDebugFile() {
 }
 #endif
 
-void SetAltLogFunc( void (*fn)(const LogSource source, const int mask, const char *msg) ) {
-  alt_log_func = fn;
-}
 
 void SetAltLogFunc(void (*fn)(const LogSource source, const int mask,
                               const char *msg))

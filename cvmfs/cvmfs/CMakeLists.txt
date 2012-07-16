@@ -44,32 +44,6 @@ set (LIBCVMFS_SOURCES
   libcvmfs.h libcvmfs.cc
 )
 
-set (LIBCVMFS_SOURCES
-	smalloc.h
-	logging.cc logging.h logging_internal.h
-	tracer.h tracer.cc atomic.h
-	duplex_sqlite3.h duplex_curl.h
-	signature.h signature.cc
-	quota.h quota.cc
-	hash.h hash.cc
-	cache.h cache.cc
-	talk.h talk.cc
-	platform.h platform_osx.h platform_linux.h
-	monitor.h monitor.cc
-	util.cc util.h
-	duplex_zlib.h compression.h compression.cc
-	download.cc download.h
-	lru.h lru.cc
-	globals.h globals.cc
-	peers.h peers.cc
-	catalog_queries.h catalog_queries.cc
-	catalog.h catalog.cc
-	catalog_mgr.h catalog_mgr.cc
-	shortstring.h dirent.h
-        libcvmfs_int.h libcvmfs_int.cc
-        libcvmfs.h libcvmfs.cc
-)
-
 set (CVMFS_FSCK_SOURCES
 	platform.h platform_linux.h platform_osx.h
   logging_internal.h logging.h logging.cc
