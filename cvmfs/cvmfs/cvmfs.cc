@@ -66,6 +66,7 @@
 #include "tracer.h"
 #include "download.h"
 #include "cache.h"
+#include "nfs_maps.h"
 #include "hash.h"
 #include "talk.h"
 #include "monitor.h"
@@ -118,6 +119,7 @@ struct DirectoryListing {
 };
 
 bool foreground_ = false;
+bool nfs_maps_ = false;
 string *mountpoint_ = NULL;
 string *cachedir_ = NULL;
 string *tracefile_ = NULL;
@@ -317,6 +319,11 @@ static void RemountCheck() {
       LogCvmfs(kLogCvmfs, kLogDebug, "reload failed, applying short term TTL");
       alarm(kShortTermTTL);
       catalogs_valid_until_ = time(NULL) + kShortTermTTL;
+    } else if (retval == catalog::kLoadUp2Date) {
+      LogCvmfs(kLogCvmfs, kLogDebug,
+               "catalog up to date, applying effective TTL");
+      alarm(GetEffectiveTTL());
+      catalogs_valid_until_ = time(NULL) + GetEffectiveTTL();
     }
   }
 }
@@ -330,9 +337,33 @@ static bool GetDirentForInode(const fuse_ino_t ino,
     return true;
 
   // Lookup inode in catalog
-  if (catalog_manager_->LookupInode(ino, catalog::kLookupFull, dirent)) {
-    inode_cache_->Insert(ino, *dirent);
-    return true;
+  if (nfs_maps_) {
+    // NFS mode
+    PathString path;
+    nfs_maps::GetPath(ino, &path);
+    if (catalog_manager_->LookupPath(path, catalog::kLookupFull, dirent)) {
+      // Fix inodes
+      dirent->set_inode(ino);
+      catalog::DirectoryEntry parent_dirent;
+      const PathString parent_path = GetParentPath(path);
+      if (md5path_cache_->Lookup(hash::Md5(parent_path.GetChars(),
+                                           parent_path.GetLength()),
+                                 &parent_dirent))
+      {
+        dirent->set_parent_inode(parent_dirent.inode());
+      } else {
+        dirent->set_parent_inode(nfs_maps::GetInode(parent_path));
+      }
+
+      inode_cache_->Insert(ino, *dirent);
+      return true;
+    }
+  } else {
+    // Normal mode
+    if (catalog_manager_->LookupInode(ino, catalog::kLookupFull, dirent)) {
+      inode_cache_->Insert(ino, *dirent);
+      return true;
+    }
   }
 
   LogCvmfs(kLogCvmfs, kLogDebug, "GetDirentForInode, no entry");
@@ -350,6 +381,10 @@ static bool GetDirentForPath(const PathString &path,
 
   // Lookup inode in catalog TODO: not twice md5 calculation
   if (catalog_manager_->LookupPath(path, catalog::kLookupSole, dirent)) {
+    if (nfs_maps_) {
+      // Fix inode
+      dirent->set_inode(nfs_maps::GetInode(path));
+    }
     dirent->set_parent_inode(parent_inode);
     md5path_cache_->Insert(md5path, *dirent);
     return true;
@@ -364,6 +399,14 @@ static bool GetDirentForPath(const PathString &path,
 static bool GetPathForInode(const fuse_ino_t ino, PathString *path) {
   // Check the path cache first
   if (path_cache_->Lookup(ino, path)) {
+    return true;
+  }
+
+  if (nfs_maps_) {
+    // NFS mode, just a lookup
+    LogCvmfs(kLogCvmfs, kLogDebug, "MISS %d - lookup in NFS maps", ino);
+    nfs_maps::GetPath(ino, path);
+    path_cache_->Insert(ino, *path);
     return true;
   }
 
@@ -401,7 +444,6 @@ static bool GetPathForInode(const fuse_ino_t ino, PathString *path) {
 static void cvmfs_lookup(fuse_req_t req, fuse_ino_t parent,
                          const char *name)
 {
-  // TODO: use generation
   atomic_inc64(&num_fs_lookup_);
   RemountCheck();
 
@@ -409,14 +451,35 @@ static void cvmfs_lookup(fuse_req_t req, fuse_ino_t parent,
   LogCvmfs(kLogCvmfs, kLogDebug,
            "cvmfs_lookup in parent inode: %d for name: %s", parent, name);
 
-  catalog::DirectoryEntry dirent;
   PathString path;
   PathString parent_path;
+  catalog::DirectoryEntry dirent;
   struct fuse_entry_param result;
+
   memset(&result, 0, sizeof(result));
   double timeout = GetKcacheTimeout();
   result.attr_timeout = timeout;
   result.entry_timeout = timeout;
+
+  // Special NFS lookups
+  if ((strcmp(name, ".") == 0) || (strcmp(name, "..") == 0)) {
+    if (GetDirentForInode(parent, &dirent)) {
+      if (strcmp(name, ".") == 0) {
+        goto reply_positive;
+      } else {
+        if (dirent.inode() == catalog_manager_->GetRootInode()) {
+          dirent.set_inode(1);
+          goto reply_positive;
+        }
+        if (GetDirentForInode(dirent.parent_inode(), &dirent))
+          goto reply_positive;
+        else
+          goto reply_negative;
+      }
+    } else {
+      goto reply_negative;
+    }
+  }
 
   if (!GetPathForInode(parent, &parent_path)) {
     LogCvmfs(kLogCvmfs, kLogDebug, "no path for parent inode found");
@@ -431,6 +494,7 @@ static void cvmfs_lookup(fuse_req_t req, fuse_ino_t parent,
     goto reply_negative;
   }
 
+ reply_positive:
   result.ino = dirent.inode();
   result.attr = dirent.GetStatStructure();
   fuse_reply_entry(req, &result);
@@ -474,6 +538,7 @@ static void cvmfs_getattr(fuse_req_t req, fuse_ino_t ino,
  */
 static void cvmfs_readlink(fuse_req_t req, fuse_ino_t ino) {
   atomic_inc64(&num_fs_readlink_);
+
   ino = catalog_manager_->MangleInode(ino);
   LogCvmfs(kLogCvmfs, kLogDebug, "cvmfs_readlink on inode: %d", ino);
 
@@ -520,6 +585,7 @@ static void AddToDirListing(const fuse_req_t req,
  */
 static void cvmfs_opendir(fuse_req_t req, fuse_ino_t ino,
                           struct fuse_file_info *fi) {
+  RemountCheck();
   ino = catalog_manager_->MangleInode(ino);
   LogCvmfs(kLogCvmfs, kLogDebug, "cvmfs_opendir on inode: %d", ino);
 
@@ -548,7 +614,8 @@ static void cvmfs_opendir(fuse_req_t req, fuse_ino_t ino,
   // Add parent directory link
   catalog::DirectoryEntry p;
   if (d.inode() != catalog_manager_->GetRootInode() &&
-      GetDirentForInode(d.parent_inode(), &p)) {
+      GetDirentForInode(d.parent_inode(), &p))
+  {
     info = p.GetStatStructure();
     AddToDirListing(req, "..", &info, &listing);
   }
@@ -563,7 +630,26 @@ static void cvmfs_opendir(fuse_req_t req, fuse_ino_t ino,
   for (catalog::StatEntryList::const_iterator i = listing_from_catalog.begin(),
        iEnd = listing_from_catalog.end(); i != iEnd; ++i)
   {
-    AddToDirListing(req, i->name.c_str(), &(i->info), &listing);
+    if (nfs_maps_) {
+      // Fix inodes
+      PathString entry_path;
+      entry_path.Assign(path);
+      entry_path.Append("/", 1);
+      entry_path.Append(i->name.GetChars(), i->name.GetLength());
+
+      catalog::DirectoryEntry entry_dirent;
+      if (!GetDirentForPath(entry_path, ino, &entry_dirent)) {
+        LogCvmfs(kLogCvmfs, kLogDebug, "listing entry %s vanished, skipping",
+                 entry_path.c_str());
+        continue;
+      }
+
+      struct stat fixed_info = i->info;
+      fixed_info.st_ino = entry_dirent.inode();
+      AddToDirListing(req, i->name.c_str(), &fixed_info, &listing);
+    } else {
+      AddToDirListing(req, i->name.c_str(), &(i->info), &listing);
+    }
   }
 
   // Save the directory listing and return a handle to the listing
@@ -1073,6 +1159,9 @@ static void cvmfs_init(void *userdata, struct fuse_conn_info *conn) {
     tracer::InitNull();
 
   atomic_init32(&drainout_mode_);
+
+  // NFS support
+  conn->want |= FUSE_CAP_EXPORT_SUPPORT;
 }
 
 static void cvmfs_destroy(void *unused __attribute__((unused))) {
@@ -1140,6 +1229,7 @@ struct CvmfsOptions {
   int      diskless;
   int      no_reload;
   int      shared_cache;
+  int      nfs_source;
 
   int64_t  quota_limit;
   int64_t  quota_threshold;
@@ -1179,6 +1269,7 @@ static struct fuse_opt cvmfs_array_opts[] = {
   CVMFS_OPT("root_hash=%s",        root_hash, 0),
   CVMFS_SWITCH("no_reload",        no_reload),
   CVMFS_SWITCH("shared_cache",     shared_cache),
+  CVMFS_SWITCH("nfs_source",       nfs_source),
 
   FUSE_OPT_KEY("-V",            KEY_VERSION),
   FUSE_OPT_KEY("--version",     KEY_VERSION),
@@ -1260,6 +1351,8 @@ static void usage(const char *progname) {
       "Avoids to reload catalogs when the TTL expires.\n"
     " -o shared_cache            "
       "Cache directory is shared among multiple instances\n"
+    " -o nfs_source              "
+      "The CernVM-FS mountpoint is exported by NFS\n"
     " Note: you cannot load files greater than quota_limit-quota_threshold\n"
     "\nFuse options:\n"
     " -o allow_other             "
@@ -1438,7 +1531,7 @@ int main(int argc, char *argv[]) {
   // Set a decent umask for new files (no write access to group/everyone).
   // We want to allow group write access for the talk-socket.
   umask(007);
-  
+
   // Jump into alternative process flavors
   if (argc > 1) {
     if (strcmp(argv[1], "__peersrv__") == 0) {
@@ -1458,6 +1551,7 @@ int main(int argc, char *argv[]) {
   bool options_ready = false;
   bool download_ready = false;
   bool cache_ready = false;
+  bool nfs_maps_ready = false;
   bool peers_ready = false;
   bool monitor_ready = false;
   bool signature_ready = false;
@@ -1631,6 +1725,26 @@ int main(int argc, char *argv[]) {
   }
   cache_ready = true;
 
+  // Start NFS maps module, if necessary
+  if (g_cvmfs_opts.nfs_source) {
+    LogCvmfs(kLogCvmfs, kLogStdout | kLogNoLinebreak,
+             "CernVM-FS: loading NFS maps... ");
+    cvmfs::nfs_maps_ = true;
+    const string leveldb_cache_dir = "./nfs_maps." + (*cvmfs::repository_name_);
+    if (!MkdirDeep(leveldb_cache_dir, 0700)) {
+      PrintError("Failed to initialize NFS maps");
+      goto cvmfs_cleanup;
+    }
+    if (!nfs_maps::Init(leveldb_cache_dir,
+                        catalog::AbstractCatalogManager::GetRootInode()))
+    {
+      PrintError("Failed to initialize NFS maps");
+      goto cvmfs_cleanup;
+    }
+    LogCvmfs(kLogCvmfs, kLogStdout, "done");
+    nfs_maps_ready = true;
+  }
+
   // Init quota / managed cache
   if (g_cvmfs_opts.quota_limit < 0) {
     LogCvmfs(kLogCvmfs, kLogDebug, "unlimited cache size");
@@ -1642,7 +1756,7 @@ int main(int argc, char *argv[]) {
   }
   if (g_cvmfs_opts.shared_cache) {
     if (!quota::InitShared(argv[0], ".", (uint64_t)g_cvmfs_opts.quota_limit,
-                           (uint64_t)g_cvmfs_opts.quota_threshold)) 
+                           (uint64_t)g_cvmfs_opts.quota_threshold))
     {
       PrintError("Failed to initialize shared lru cache");
       goto cvmfs_cleanup;
@@ -1650,7 +1764,7 @@ int main(int argc, char *argv[]) {
   } else {
     if (!quota::Init(".", (uint64_t)g_cvmfs_opts.quota_limit,
                      (uint64_t)g_cvmfs_opts.quota_threshold,
-                     g_cvmfs_opts.rebuild_cachedb)) 
+                     g_cvmfs_opts.rebuild_cachedb))
     {
       PrintError("Failed to initialize lru cache");
       goto cvmfs_cleanup;
@@ -1736,24 +1850,6 @@ int main(int argc, char *argv[]) {
   }
   catalog_ready = true;
 
-  // Setup catalog reload alarm
-  atomic_init32(&cvmfs::catalogs_expired_);
-  if (!g_cvmfs_opts.root_hash && !g_cvmfs_opts.no_reload) {
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_sigaction = cvmfs::AlarmReload;
-    sa.sa_flags = SA_SIGINFO;
-    sigfillset(&sa.sa_mask);
-    retval = sigaction(SIGALRM, &sa, NULL);
-    assert(retval == 0);
-    unsigned ttl = cvmfs::catalog_manager_->offline_mode() ?
-      cvmfs::kShortTermTTL : cvmfs::GetEffectiveTTL();
-    alarm(ttl);
-    cvmfs::catalogs_valid_until_ = time(NULL) + ttl;
-  } else {
-    cvmfs::catalogs_valid_until_ = cvmfs::kIndefiniteDeadline;
-  }
-
   // Set fuse callbacks, remove url from arguments
   LogCvmfs(kLogCvmfs, kLogSyslog,
            "CernVM-FS: linking %s to repository %s",
@@ -1771,8 +1867,26 @@ int main(int argc, char *argv[]) {
   if ((ch = fuse_mount(cvmfs::mountpoint_->c_str(), &g_fuse_args)) != NULL) {
     LogCvmfs(kLogCvmfs, kLogStdout, "CernVM-FS: mounted cvmfs on %s",
              cvmfs::mountpoint_->c_str());
-    if (!g_foreground)     
+    if (!g_foreground)
       Daemonize();
+
+    // Setup catalog reload alarm (_after_ fork())
+    atomic_init32(&cvmfs::catalogs_expired_);
+    if (!g_cvmfs_opts.root_hash && !g_cvmfs_opts.no_reload) {
+      struct sigaction sa;
+      memset(&sa, 0, sizeof(sa));
+      sa.sa_sigaction = cvmfs::AlarmReload;
+      sa.sa_flags = SA_SIGINFO;
+      sigfillset(&sa.sa_mask);
+      retval = sigaction(SIGALRM, &sa, NULL);
+      assert(retval == 0);
+      unsigned ttl = cvmfs::catalog_manager_->offline_mode() ?
+      cvmfs::kShortTermTTL : cvmfs::GetEffectiveTTL();
+      alarm(ttl);
+      cvmfs::catalogs_valid_until_ = time(NULL) + ttl;
+    } else {
+      cvmfs::catalogs_valid_until_ = cvmfs::kIndefiniteDeadline;
+    }
 
     struct fuse_session *se;
     se = fuse_lowlevel_new(&g_fuse_args, &cvmfs_operations,
@@ -1813,6 +1927,7 @@ int main(int argc, char *argv[]) {
   if (talk_ready) talk::Fini();
   if (monitor_ready) monitor::Fini();
   if (quota_ready) quota::Fini();
+  if (nfs_maps_ready) nfs_maps::Fini();
   if (cache_ready) cache::Fini();
   if (running_created) unlink(("running." + *cvmfs::repository_name_).c_str());
   if (fd_lockfile >= 0) UnlockFile(fd_lockfile);

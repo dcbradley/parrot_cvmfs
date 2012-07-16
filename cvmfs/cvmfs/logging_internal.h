@@ -15,8 +15,19 @@ enum LogFacilities {
   kLogStdout = 2,
   kLogStderr = 4,
   kLogSyslog = 8,
-  // Flags
+};
+
+enum LogFlags {
   kLogNoLinebreak = 16,
+  kLogShowSource = 32,
+};
+
+enum LogLevels {
+  kLogLevel0 = 128,
+  kLogVerbose = 256,
+  kLogNormal = 512,
+  kLogDiscrete = 1024,
+  kLogNone = 2048,
 };
 
 enum LogSource {
@@ -34,10 +45,15 @@ enum LogSource {
   kLogFuse,
   kLogSignature,
   kLogPeers,
+  kLogFsTraversal,
+  kLogNfsMaps,
 };
+
+const int kLogVerboseMsg = kLogStdout | kLogShowSource | kLogVerbose;
 
 void SetLogSyslogLevel(const int level);
 void SetLogSyslogPrefix(const std::string &prefix);
+void SetLogVerbosity(const LogLevels min_level);
 
 #ifdef DEBUGMSG
 void SetLogDebugFile(const std::string &filename);
@@ -46,5 +62,8 @@ std::string GetLogDebugFile();
 #define SetLogDebugFile(filename) ((void)0)
 #define GetLogDebugFile() (std::string(""))
 #endif
+
+void SetAltLogFunc(void (*fn)(const LogSource source, const int mask,
+                              const char *msg));
 
 #endif  // CVMFS_LOGGING_INTERNAL_H_
