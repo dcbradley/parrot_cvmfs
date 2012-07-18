@@ -608,16 +608,13 @@ then
 	# this is the layout for cvmfs 2.1
 	ccflags="${ccflags} -I${cvmfs_path}/include -DHAS_CVMFS"
 
-	for library in lib/cvmfs lib/sqlite3 lib/curl lib/cares lib/murmur
-	do
-		lib_path=${cvmfs_path}/`dirname ${library}`
-                library=`basename ${library}`
-		if ! library_search $library ${lib_path}
-		then
-			echo "*** Couldn't find $library in ${lib_path}"
-			exit 1
-		fi
-	done
+	lib_path=${cvmfs_path}/lib
+	library=cvmfs
+	if ! library_search $library ${lib_path}
+	then
+		echo "*** Couldn't find ${library} in ${lib_path}"
+		exit 1
+	fi
 elif [ $config_cvmfs_path != no ] && check_file ${cvmfs_path}/cvmfs/src/libcvmfs.h
 then
 	# this is the layout for cvmfs 2.0
