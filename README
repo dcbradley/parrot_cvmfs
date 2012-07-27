@@ -10,7 +10,7 @@ The CVMFS and parrot code was checked out from the project
 subversion repositories and was copied into the 'upstream' branch.
 The following versions are currently used:
 
-cvmfs git repo 956b33d88 (2.1 dev branch)
+cvmfs git repo 6455bfa65df0 (2.1 dev branch)
 cctools trunk r2147
 
 To see the development that has been done, compare the cvmfs2_1
