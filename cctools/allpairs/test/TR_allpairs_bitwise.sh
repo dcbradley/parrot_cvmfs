@@ -7,6 +7,7 @@ portfile=worker.port
 
 prepare()
 {
+    cd ../src; make ; cd -
     workerport=`find_free_port`
     ../../dttools/src/work_queue_worker -d all localhost $workerport &
     workerpid=$!
@@ -18,7 +19,7 @@ prepare()
 
 run()
 {
-    exec ../src/allpairs_master -d all -p `cat $portfile` set.list set.list ./lc_compare.sh
+    exec ../src/allpairs_master -d all -x 1 -y 1 -p `cat $portfile` set.list set.list BITWISE
 }
 
 clean()

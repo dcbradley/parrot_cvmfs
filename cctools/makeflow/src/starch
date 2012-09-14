@@ -60,7 +60,7 @@ fi
 extract() {
     if [ ! -d "$SFX_DIR" -o "$SFX_EXTRACT_FORCE" -eq 1 ]; then
         mkdir -p $SFX_DIR 2> /dev/null
-        archive=`awk '/^__ARCHIVE__/ {print NR + 1; exit 0; }' $SFX_FILE)`
+        archive=`awk '/^__ARCHIVE__/ {print NR + 1; exit 0; }' $SFX_FILE`
         tail -n+$archive $SFX_FILE | tar xj -C $SFX_DIR
         SFX_EXIT_STATUS=$?
     fi
@@ -369,13 +369,15 @@ def parse_command_line_options():
         options.environments.extend(config.get('starch', 'environments', '').split())
         if not options.command:
             options.command = config.get('starch', 'command', '')
-
+    
     if not options.executables:
         error('no executables specified')
 
     if not options.command:
         options.command = os.path.basename(options.executables[0]) + ' $@'
         warn('no command specified, so using: %s' % options.command)
+    
+    debug('command ... ' + options.command)
 
     return args[0], options.executables, options.libraries, \
                     options.data, options.environments, options.command
