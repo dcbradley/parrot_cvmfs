@@ -11,8 +11,10 @@ See the file COPYING for details.
 #include "pfs_poll.h"
 #include "pfs_service.h"
 #include "pfs_critical.h"
+#include "pfs_paranoia.h"
 
 extern "C" {
+#include "cctools.h"
 #include "tracer.h"
 #include "stringtools.h"
 #include "auth_all.h"
@@ -59,6 +61,7 @@ int pfs_session_cache = 0;
 int pfs_use_helper = 1;
 int pfs_checksum_files = 1;
 int pfs_write_rval = 0;
+int pfs_paranoid_mode = 0;
 const char *pfs_write_rval_file = "parrot.rval";
 int pfs_enable_small_file_optimizations = 1;
 char pfs_temp_dir[PFS_PATH_MAX];
@@ -70,7 +73,6 @@ const char *pfs_root_checksum=0;
 const char *pfs_initial_working_directory=0;
 
 char *pfs_false_uname = 0;
-char *pfs_ccurl = 0;
 char *pfs_ldso_path = 0;
 uid_t pfs_uid = 0;
 gid_t pfs_gid = 0;
@@ -94,18 +96,10 @@ static pid_t root_pid = -1;
 static int root_exitstatus = 0;
 static int channel_size = 10;
 
-static void show_version( const char *cmd )
-{
-	printf("%s version %d.%d.%d built by %s@%s on %s at %s\n",cmd,CCTOOLS_VERSION_MAJOR,CCTOOLS_VERSION_MINOR,CCTOOLS_VERSION_MICRO,BUILD_USER,BUILD_HOST,__DATE__,__TIME__);
-	exit(1);
-}
-
-static void get_linux_version()
+static void get_linux_version(const char *cmd)
 {
 	struct utsname name;
 	int major,minor,micro,fields;
-
-	debug(D_DEBUG,"%s version %d.%d.%d built by %s@%s on %s at %s\n","parrot",CCTOOLS_VERSION_MAJOR,CCTOOLS_VERSION_MINOR,CCTOOLS_VERSION_MICRO,BUILD_USER,BUILD_HOST,__DATE__,__TIME__);
 
 	uname(&name);
 
@@ -124,6 +118,11 @@ static void get_linux_version()
 					pfs_trap_after_fork = 1;
 					return;
 				} else if(minor==6) {
+					pfs_trap_after_fork = 0;
+					return;
+				}
+			} else if(major==3) {
+				if(minor<=2) {
 					pfs_trap_after_fork = 0;
 					return;
 				}
@@ -172,7 +171,6 @@ static void show_use( const char *cmd )
 	printf("  -D         Disable small file optimizations.\n");
 	printf("  -F         Enable file snapshot caching for all protocols.\n");
 	printf("  -f         Disable following symlinks.\n");
-	printf("  -E <url>   Endpoint for gLite combined catalog ifc. (PARROT_GLITE_CCURL)\n");
 	printf("  -G <num>   Fake this gid; Real gid stays the same.          (PARROT_GID)\n");
 	printf("  -H         Disable use of helper library.\n");
 	printf("  -h         Show this screen.\n");
@@ -187,6 +185,7 @@ static void show_use( const char *cmd )
 	printf("  -o <file>  Send debugging messages to this file.     (PARROT_DEBUG_FILE)\n");
 	printf("  -O <bytes> Rotate debug files of this size.     (PARROT_DEBUG_FILE_SIZE)\n");
 	printf("  -p <hst:p> Use this proxy server for HTTP requests.         (HTTP_PROXY)\n");
+	printf("  -P         Enable paranoid mode for identity boxing mode.\n");
 	printf("  -Q         Inhibit catalog queries to list /chirp.\n");
 	printf("  -r <repos> CVMFS repositories to enable.             (PARROT_CVMFS_REPO)\n");
 	printf("  -R <cksum> Enforce this root filesystem checksum, where available.\n");
@@ -247,30 +246,6 @@ void install_handler( int sig, void (*handler)(int sig))
 
 static void ignore_signal( int sig )
 {
-}
-
-/*
-It would be nice if we could clean up everyone quietly and then
-some time later, kill hard.  However, on Linux, if someone kills
-us before we have a chance to clean up, then due to a "feature"
-of ptrace, all our children will be left stuck in a debug-wait
-state.  So, rather than chance ourselves getting killed, we
-will be very agressive about cleaning up.  Upon receiving any
-shutdown signal, we immediately blow away everyone involved,
-and then kill ourselves.
-*/
-
-static void kill_everyone( int sig )
-{
-	debug(D_NOTICE,"received signal %d (%s), killing all my children...",sig,string_signal(sig));
-	pfs_process_killall();
-	debug(D_NOTICE,"sending myself %d (%s), goodbye!",sig,string_signal(sig));
-	while(1) {
-		signal(sig,SIG_DFL);
-		sigsetmask(~sigmask(sig));
-		kill(getpid(),sig);
-		kill(getpid(),SIGKILL);
-	}
 }
 
 void pfs_abort()
@@ -413,14 +388,14 @@ int main( int argc, char *argv[] )
 	debug_config_fatal(pfs_process_killall);
 	debug_config_getpid(pfs_process_getpid);
 
-	install_handler(SIGQUIT,kill_everyone);
-	install_handler(SIGILL,kill_everyone);
-	install_handler(SIGABRT,kill_everyone);
-	install_handler(SIGIOT,kill_everyone);
-	install_handler(SIGBUS,kill_everyone);
-	install_handler(SIGFPE,kill_everyone);
-	install_handler(SIGSEGV,kill_everyone);
-	install_handler(SIGTERM,kill_everyone);
+	install_handler(SIGQUIT,pfs_process_kill_everyone);
+	install_handler(SIGILL,pfs_process_kill_everyone);
+	install_handler(SIGABRT,pfs_process_kill_everyone);
+	install_handler(SIGIOT,pfs_process_kill_everyone);
+	install_handler(SIGBUS,pfs_process_kill_everyone);
+	install_handler(SIGFPE,pfs_process_kill_everyone);
+	install_handler(SIGSEGV,pfs_process_kill_everyone);
+	install_handler(SIGTERM,pfs_process_kill_everyone);
 	install_handler(SIGHUP,pass_through);
 	install_handler(SIGINT,pass_through);
 	install_handler(SIGTTIN,control_terminal);
@@ -473,9 +448,6 @@ int main( int argc, char *argv[] )
 	s = getenv("PARROT_TIMEOUT");
 	if(s) pfs_master_timeout = string_time_parse(s);
 
-	s = getenv("PARROT_GLITE_CCURL");
-	if(s) pfs_ccurl = s;
-
 	s = getenv("PARROT_FORCE_SYNC");
 	if(s) pfs_force_sync = 1;
 
@@ -521,7 +493,7 @@ int main( int argc, char *argv[] )
 
 	sprintf(pfs_temp_dir,"/tmp/parrot.%d",getuid());
 
-	while((c=getopt(argc,argv,"+hA:a:b:B:c:Cd:DE:FfG:Hi:I:kKl:m:M:N:o:O:p:Qr:R:sSt:T:U:u:vw:WY"))!=(char)-1) {
+	while((c=getopt(argc,argv,"+hA:a:b:B:c:Cd:DFfG:Hi:I:kKl:m:M:N:o:O:p:PQr:R:sSt:T:U:u:vw:WY"))!=(char)-1) {
 		switch(c) {
 		case 'a':
 			if(!auth_register_byname(optarg)) {
@@ -548,9 +520,6 @@ int main( int argc, char *argv[] )
 			break;
 		case 'D':
 			pfs_enable_small_file_optimizations = 0;
-			break;
-		case 'E':
-			pfs_ccurl = optarg;
 			break;
 		case 'F':
 			pfs_force_cache = 1;
@@ -597,6 +566,9 @@ int main( int argc, char *argv[] )
 		case 'p':
 			setenv("HTTP_PROXY",optarg,1);
 			break;
+		case 'P':
+			pfs_paranoid_mode = 1;
+			break;
 		case 'Q':
 			chirp_global_inhibit_catalog(1);
 			break;
@@ -630,7 +602,8 @@ int main( int argc, char *argv[] )
 			pfs_force_sync = 1;
 			break;
 		case 'v':
-			show_version(argv[0]);
+			cctools_version_print(stdout, argv[0]);
+			exit(EXIT_SUCCESS);
 			break;
 		case 'w':
 			pfs_initial_working_directory = optarg;
@@ -647,7 +620,8 @@ int main( int argc, char *argv[] )
 
 	if(optind>=argc) show_use(argv[0]);
 
-	get_linux_version();
+	cctools_version_debug(D_DEBUG, argv[0]);
+	get_linux_version(argv[0]);
 
 	pfs_file_cache = file_cache_init(pfs_temp_dir);
 	if(!pfs_file_cache) fatal("couldn't setup cache in %s: %s\n",pfs_temp_dir,strerror(errno));
@@ -669,6 +643,16 @@ int main( int argc, char *argv[] )
 
 	if(pfs_use_helper) pfs_helper_init(argv[0]);
 
+	pid_t pfs_watchdog_pid = -2;
+	if (pfs_paranoid_mode) {
+		pfs_watchdog_pid = pfs_paranoia_setup();
+		if (pfs_watchdog_pid < 0) {
+			fatal("couldn't initialize paranoid mode.");
+		} else {
+			debug(D_PROCESS,"watchdog PID %d",pfs_watchdog_pid);
+		}
+	} 
+
 	pfs_poll_init();
 
 	/*
@@ -689,6 +673,7 @@ int main( int argc, char *argv[] )
 		if(pid>0) {
 			debug(D_PROCESS,"pid %d started",pid);
 		} else if(pid==0) {
+			pfs_paranoia_payload();
 			setpgrp();
 			tracer_prepare();
 			kill(getpid(),SIGSTOP);
@@ -736,7 +721,13 @@ int main( int argc, char *argv[] )
 				flags = WUNTRACED|__WALL|WNOHANG;
 			}
 			pid = wait4(trace_this_pid,&status,flags,&usage);
-			if(pid>0) {
+			if (pid == pfs_watchdog_pid) {
+				if (WIFEXITED(status) || WIFSIGNALED(status)) {
+				debug(D_NOTICE,"watchdog died unexpectedly; killing everyone");
+				pfs_process_kill_everyone(SIGKILL);
+				break;
+			}
+			} else if(pid>0) {
 				handle_event(pid,status,usage);
 			} else {
 				break;
@@ -770,6 +761,8 @@ int main( int argc, char *argv[] )
 
 		#endif
 	}
+
+	if(pfs_paranoid_mode) pfs_paranoia_cleanup();
 
 	if(WIFEXITED(root_exitstatus)) {
 		status = WEXITSTATUS(root_exitstatus);

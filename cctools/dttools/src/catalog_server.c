@@ -5,6 +5,7 @@ This software is distributed under the GNU General Public License.
 See the file COPYING for details.
 */
 
+#include "cctools.h"
 #include "catalog_server.h"
 #include "datagram.h"
 #include "link.h"
@@ -237,14 +238,14 @@ static void handle_updates(struct datagram *update_port)
 }
 
 static struct nvpair_header html_headers[] = {
-	{"type", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
-	{"name", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
-	{"port", NVPAIR_MODE_INTEGER, NVPAIR_ALIGN_LEFT, 0},
-	{"owner", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
-	{"total", NVPAIR_MODE_METRIC, NVPAIR_ALIGN_RIGHT, 0},
-	{"avail", NVPAIR_MODE_METRIC, NVPAIR_ALIGN_RIGHT, 0},
-	{"load5", NVPAIR_MODE_STRING, NVPAIR_ALIGN_RIGHT, 0},
-	{"version", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
+	{"type", "TYPE", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
+	{"name", "NAME", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
+	{"port", "PORT", NVPAIR_MODE_INTEGER, NVPAIR_ALIGN_LEFT, 0},
+	{"owner", "OWNER", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
+	{"total", "TOTAL", NVPAIR_MODE_METRIC, NVPAIR_ALIGN_RIGHT, 0},
+	{"avail", "AVAIL", NVPAIR_MODE_METRIC, NVPAIR_ALIGN_RIGHT, 0},
+	{"load5", "LOAD5", NVPAIR_MODE_STRING, NVPAIR_ALIGN_RIGHT, 0},
+	{"version", "VERSION", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
 	{0,}
 };
 
@@ -413,11 +414,6 @@ static void handle_query(struct link *query_link)
 	fclose(stream);
 }
 
-static void show_version(const char *cmd)
-{
-	printf("%s version %d.%d.%d built by %s@%s on %s at %s\n", cmd, CCTOOLS_VERSION_MAJOR, CCTOOLS_VERSION_MINOR, CCTOOLS_VERSION_MICRO, BUILD_USER, BUILD_HOST, __DATE__, __TIME__);
-}
-
 static void show_help(const char *cmd)
 {
 	printf("Use: %s [options]\n", cmd);
@@ -493,7 +489,7 @@ int main(int argc, char *argv[])
 				child_procs_timeout = string_time_parse(optarg);
 				break;
 			case 'v':
-				show_version(argv[0]);
+				cctools_version_print(stdout, argv[0]);
 				return 0;
 			case 'h':
 			default:
@@ -505,6 +501,8 @@ int main(int argc, char *argv[])
 	if (is_daemon) daemonize(0);
 
 	debug_config_file(debug_filename);
+
+	cctools_version_debug(D_DEBUG, argv[0]);
 
 	if(logfilename) {
 		logfile = fopen(logfilename,"a");
