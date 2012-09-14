@@ -581,6 +581,21 @@ then
 			exit 1
 		fi
 	done
+elif [ $config_cvmfs_path != no ] && check_file ${cvmfs_path}/cvmfs/src/libcvmfs.h
+then
+	# this is the old-style cvmfs 2.0 build tree layout
+        ccflags="${ccflags} -I${cvmfs_path}/cvmfs/src -DHAS_CVMFS"
+
+        for library in cvmfs/src/cvmfs sqlite3/src/sqlite3 libcurl/src/lib/.libs/curl c-ares/src/.libs/cares
+	do
+                lib_path=${cvmfs_path}/`dirname ${library}`
+		library=`basename ${library}`
+                if ! library_search $library ${lib_path}
+		    then
+                        echo "*** Couldn't find $library in ${lib_path}"
+                        exit 1
+                fi
+        done
 else
 	if [ $config_cvmfs_path = yes ]
 	then
