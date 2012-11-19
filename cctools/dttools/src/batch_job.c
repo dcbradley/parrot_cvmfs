@@ -17,6 +17,7 @@ See the file COPYING for details.
 #include "process.h"
 #include "stringtools.h"
 #include "timestamp.h"
+#include "xxmalloc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -94,6 +95,19 @@ const char *batch_queue_type_to_string(batch_queue_type_t t)
 	default:
 		return "unknown";
 	}
+}
+
+struct work_queue *batch_queue_get_work_queue(struct batch_queue *q) {
+	if(!q) {
+		debug(D_BATCH, "error: batch queue has not been created yet.\n");
+		return NULL;
+	}
+	if(q->type == BATCH_QUEUE_TYPE_WORK_QUEUE || q->type == BATCH_QUEUE_TYPE_WORK_QUEUE_SHAREDFS) {
+		return q->work_queue;
+	} else {
+		debug(D_BATCH, "error: batch queue type is not Work Queue.\n");
+	}
+	return NULL;
 }
 
 struct batch_queue *batch_queue_create(batch_queue_type_t type)
@@ -201,10 +215,18 @@ void batch_queue_set_options(struct batch_queue *q, const char *options_text)
 	}
 
 	if(options_text) {
-		q->options_text = strdup(options_text);
+		q->options_text = xxstrdup(options_text);
 	} else {
-		q->options_text = 0;
+		q->options_text = NULL;
 	}
+}
+
+char *batch_queue_options(struct batch_queue *q)
+{
+    if (q->options_text)
+    	return xxstrdup(q->options_text);
+    else
+    	return NULL;
 }
 
 batch_job_id_t batch_job_submit(struct batch_queue *q, const char *cmd, const char *args, const char *infile, const char *outfile, const char *errfile, const char *extra_input_files, const char *extra_output_files)

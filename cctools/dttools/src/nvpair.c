@@ -127,7 +127,7 @@ int nvpair_print_alloc(struct nvpair *n, char **text)
 		nvpair_print(n, *text, needed + 1);
 	}
 
-	return 1;
+	return needed;
 }
 
 void nvpair_insert_string(struct nvpair *n, const char *name, const char *value)
@@ -281,7 +281,7 @@ void nvpair_print_html_header(FILE * s, struct nvpair_header *h)
 	fprintf(s, "<table bgcolor=%s>\n", COLOR_TWO);
 	fprintf(s, "<tr bgcolor=%s>\n", COLOR_ONE);
 	while(h->name) {
-		fprintf(s, "<td align=%s><b>%s</b>\n", align_string(h), h->name);
+		fprintf(s, "<td align=%s><b>%s</b>\n", align_string(h), h->title);
 		h++;
 	}
 	color_counter = 0;
@@ -349,7 +349,7 @@ void nvpair_print_table_header(FILE * s, struct nvpair_header *h)
 {
 	while(h->name) {
 		char *n = xxmalloc(h->width + 1);
-		fill_string(h->name, n, h->width, h->align);
+		fill_string(h->title, n, h->width, h->align);
 		string_toupper(n);
 		printf("%s ", n);
 		free(n);

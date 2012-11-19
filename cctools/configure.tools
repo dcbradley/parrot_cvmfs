@@ -224,46 +224,23 @@ optional_file()
 
 optional_include()
 {
-	multiarch_include=`echo $1 | sed "s|include/|include/$HOST_MULTIARCH/|"`
+	echo -n "checking for header $1..."
 
-	if optional_file $1 $2;
+cat > .configure.tmp.c << EOF
+#include <stdlib.h>
+#include <$1>
+EOF
+	if gcc .configure.tmp.c -c -o .configure.tmp.o > .configure.tmp.out 2>&1 
 	then
+		echo yes
+		rm -f .configure.tmp.c .configure.tmp.out
+		ccflags="${ccflags} -D$2"
 		return 0
-	elif [ X$HOST_MULTIARCH != X ] && optional_file $multiarch_include $2;
-	then
-		return 0
-	fi
-
-	return 1
-}
-
-optional_pfs_service()
-{
-	service=$1
-	shift 1
-
-	echo -n "including pfs_service_${service}..."
-
-	for lib in $@; do
-		if echo $ccflags | grep "$lib" > /dev/null 2>&1
-		then
-			true
-		else
-			echo "no"
-			return 1
-		fi
-	done
-
-	echo "yes"
-	ccflag="HAS_$(echo ${service} | tr [a-z] [A-Z])"
-	if echo $ccflags | grep $ccflag > /dev/null 2>&1
-	then
-		true
 	else
-		ccflags="${ccflags} -D${ccflag}"
+		echo no
+		rm -f .configure.tmp.c .configure.tmp.out
+		return 1
 	fi
-	pfs_optional_services="${pfs_optional_services} pfs_service_${service}.o"
-	return 0
 }
 
 check_gnu_make()

@@ -5,6 +5,7 @@ This software is distributed under the GNU General Public License.
 See the file COPYING for details.
 */
 
+#include "cctools.h"
 #include "catalog_server.h"
 #include "datagram.h"
 #include "link.h"
@@ -237,14 +238,14 @@ static void handle_updates(struct datagram *update_port)
 }
 
 static struct nvpair_header html_headers[] = {
-	{"type", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
-	{"name", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
-	{"port", NVPAIR_MODE_INTEGER, NVPAIR_ALIGN_LEFT, 0},
-	{"owner", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
-	{"total", NVPAIR_MODE_METRIC, NVPAIR_ALIGN_RIGHT, 0},
-	{"avail", NVPAIR_MODE_METRIC, NVPAIR_ALIGN_RIGHT, 0},
-	{"load5", NVPAIR_MODE_STRING, NVPAIR_ALIGN_RIGHT, 0},
-	{"version", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
+	{"type", "TYPE", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
+	{"name", "NAME", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
+	{"port", "PORT", NVPAIR_MODE_INTEGER, NVPAIR_ALIGN_LEFT, 0},
+	{"owner", "OWNER", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
+	{"total", "TOTAL", NVPAIR_MODE_METRIC, NVPAIR_ALIGN_RIGHT, 0},
+	{"avail", "AVAIL", NVPAIR_MODE_METRIC, NVPAIR_ALIGN_RIGHT, 0},
+	{"load5", "LOAD5", NVPAIR_MODE_STRING, NVPAIR_ALIGN_RIGHT, 0},
+	{"version", "VERSION", NVPAIR_MODE_STRING, NVPAIR_ALIGN_LEFT, 0},
 	{0,}
 };
 
@@ -413,29 +414,26 @@ static void handle_query(struct link *query_link)
 	fclose(stream);
 }
 
-static void show_version(const char *cmd)
-{
-	printf("%s version %d.%d.%d built by %s@%s on %s at %s\n", cmd, CCTOOLS_VERSION_MAJOR, CCTOOLS_VERSION_MINOR, CCTOOLS_VERSION_MICRO, BUILD_USER, BUILD_HOST, __DATE__, __TIME__);
-}
-
 static void show_help(const char *cmd)
 {
 	printf("Use: %s [options]\n", cmd);
 	printf("where options are:\n");
-	printf(" -p <port>      Port number to listen on (default is %d)\n", port);
-	printf(" -l <secs>      Lifetime of data, in seconds (default is %d)\n", lifetime);
+	printf(" -b             Run as a daemon.\n");
+	printf(" -B <file>      Write process identifier (PID) to file.\n");
 	printf(" -d <subsystem> Enable debugging for this subsystem\n");
+	printf(" -h             Show this help screen\n");
+	printf(" -l <secs>      Lifetime of data, in seconds (default is %d)\n", lifetime);
+	printf(" -L <file>      Log new updates to this file.\n");
+	printf(" -m <n>         Maximum number of child processes.  (default is %d)\n",child_procs_max);
+	printf(" -M <size>      Maximum size of a server to be believed.  (default is any)\n");
 	printf(" -o <file>      Send debugging to this file.\n");
 	printf(" -O <bytes>     Rotate debug file once it reaches this size.\n");
-	printf(" -u <host>      Send status updates to this host. (default is %s)\n", CATALOG_HOST_DEFAULT);
-	printf(" -m <n>         Maximum number of child processes.  (default is %d)\n",child_procs_max);
-	printf(" -T <time>	Maximum time to allow a query process to run.  (default is %ds)\n",child_procs_timeout);
-	printf(" -M <size>      Maximum size of a server to be believed.  (default is any)\n");
-	printf(" -U <time>      Send status updates at this interval. (default is 5m)\n");
-	printf(" -L <file>      Log new updates to this file.\n");
+	printf(" -p <port>      Port number to listen on (default is %d)\n", port);
 	printf(" -S             Single process mode; do not work on queries.\n");
+	printf(" -T <time>	Maximum time to allow a query process to run.  (default is %ds)\n",child_procs_timeout);
+	printf(" -u <host>      Send status updates to this host. (default is %s)\n", CATALOG_HOST_DEFAULT);
+	printf(" -U <time>      Send status updates at this interval. (default is 5m)\n");
 	printf(" -v             Show version string\n");
-	printf(" -h             Show this help screen\n");
 }
 
 int main(int argc, char *argv[])
@@ -444,27 +442,40 @@ int main(int argc, char *argv[])
 	char ch;
 	time_t current;
 	int is_daemon = 0;
+	char *pidfile = NULL;
 
 	outgoing_host_list = list_create();
 
 	debug_config(argv[0]);
 
-	while((ch = getopt(argc, argv, "bp:l:L:m:M:d:o:O:u:U:SThv")) != (char) -1) {
+	while((ch = getopt(argc, argv, "bB:d:hl:L:m:M:o:O:p:ST:u:U:v")) != (char) -1) {
 		switch (ch) {
 			case 'b':
 				is_daemon = 1;
 				break;
+			case 'B':
+				free(pidfile);
+				pidfile = strdup(optarg);
+				break;
 			case 'd':
 				debug_flags_set(optarg);
+				break;
+			case 'h':
+			default:
+				show_help(argv[0]);
+				return 1;
+			case 'l':
+				lifetime = string_time_parse(optarg);
+				break;
+			case 'L':
+				free(logfilename);
+				logfilename = strdup(optarg);
 				break;
 			case 'm':
 				child_procs_max = atoi(optarg);
 				break;
 			case 'M':
 				max_server_size = string_metric_parse(optarg);
-				break;
-			case 'p':
-				port = atoi(optarg);
 				break;
 			case 'o':
 				free(debug_filename);
@@ -473,18 +484,8 @@ int main(int argc, char *argv[])
 			case 'O':
 				debug_config_file_size(string_metric_parse(optarg));
 				break;
-			case 'u':
-				list_push_head(outgoing_host_list, xxstrdup(optarg));
-				break;
-			case 'U':
-				outgoing_timeout = string_time_parse(optarg);
-				break;
-			case 'l':
-				lifetime = string_time_parse(optarg);
-				break;
-			case 'L':
-				free(logfilename);
-				logfilename = strdup(optarg);
+			case 'p':
+				port = atoi(optarg);
 				break;
 			case 'S':
 				fork_mode = 0;
@@ -492,19 +493,23 @@ int main(int argc, char *argv[])
 			case 'T':
 				child_procs_timeout = string_time_parse(optarg);
 				break;
+			case 'u':
+				list_push_head(outgoing_host_list, xxstrdup(optarg));
+				break;
+			case 'U':
+				outgoing_timeout = string_time_parse(optarg);
+				break;
 			case 'v':
-				show_version(argv[0]);
+				cctools_version_print(stdout, argv[0]);
 				return 0;
-			case 'h':
-			default:
-				show_help(argv[0]);
-				return 1;
 			}
 	}
 
-	if (is_daemon) daemonize(0);
+	if (is_daemon) daemonize(0, pidfile);
 
 	debug_config_file(debug_filename);
+
+	cctools_version_debug(D_DEBUG, argv[0]);
 
 	if(logfilename) {
 		logfile = fopen(logfilename,"a");

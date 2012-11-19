@@ -330,8 +330,7 @@ int ibox_acl_rmdir(const char *path)
 			return -1;
 		}
 		closedir(dir);
-		delete_dir(dir);
-		return 0;
+		return delete_dir(path);
 	} else {
 		errno = ENOENT;
 		return -1;
