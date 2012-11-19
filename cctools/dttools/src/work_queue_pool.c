@@ -4,6 +4,7 @@ This software is distributed under the GNU General Public License.
 See the file COPYING for details.
 */
 
+#include "cctools.h"
 #include "batch_job.h"
 #include "hash_table.h"
 #include "copy_stream.h"
@@ -1072,7 +1073,6 @@ static void show_help(const char *cmd)
 	printf("  -t <time>      Abort after this amount of idle time.\n");
 	printf("  -C <catalog>   Set catalog server to <catalog>. Format: HOSTNAME:PORT \n");
 	printf("  -N <project>   Name of a preferred project. A worker can have multiple preferred projects.\n");
-	printf("  -s             Run as a shared worker. By default the workers would only work for their preferred project(s).\n");
 	printf("  -o <file>      Send debugging to this file.\n");
 }
 
@@ -1125,7 +1125,9 @@ int main(int argc, char *argv[])
 
 	set_pool_name(name_of_this_pool, WORK_QUEUE_POOL_NAME_MAX);
 
-	while((c = getopt(argc, argv, "aAc:C:d:hm:N:Pqr:sS:t:T:W:")) != (char) -1) {
+	debug_config(argv[0]);
+
+	while((c = getopt(argc, argv, "aAc:C:d:hm:N:o:O:Pqr:S:t:T:vW:")) != (char) -1) {
 		switch (c) {
 		case 'a':
 			strcat(worker_args, " -a");
@@ -1150,9 +1152,6 @@ int main(int argc, char *argv[])
 			strcat(worker_args, optarg);
 			list_push_tail(regex_list, strdup(optarg));
 			break;
-		case 's':
-			strcat(worker_args, " -s");
-			break;
 		case 't':
 			strcat(worker_args, " -t ");
 			strcat(worker_args, optarg);
@@ -1168,6 +1167,12 @@ int main(int argc, char *argv[])
 			} else {
 				workers_per_job = count;
 			}
+			break;
+		case 'o':
+			debug_config_file(optarg);
+			break;
+		case 'O':
+			debug_config_file_size(string_metric_parse(optarg));
 			break;
 		case 'P':
 			auto_worker_pool = 1;
@@ -1201,12 +1206,17 @@ int main(int argc, char *argv[])
 		case 'r':
 			retry_count = atoi(optarg);
 			break;
+		case 'v':
+			cctools_version_print(stdout, argv[0]);
+			exit(EXIT_SUCCESS);
 		case 'h':
 		default:
 			show_help(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}
+
+	cctools_version_debug(D_DEBUG, argv[0]);
 
 	if(!auto_worker_pool) {
 		if(!auto_worker) {
@@ -1329,7 +1339,7 @@ int main(int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 		if(pool_config_path[0] == '/') {
-			strncpy(pool_config_path, pool_config_canonical_path, PATH_MAX);
+			strncpy(pool_config_canonical_path, pool_config_path, PATH_MAX);
 		} else {
 			get_canonical_path(".", pool_config_canonical_path, PATH_MAX);
 			char *p;
