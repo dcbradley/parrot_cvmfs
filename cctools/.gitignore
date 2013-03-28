@@ -1,0 +1,10 @@
+*.a
+*.dylib
+*.dSYM
+*.gz
+*.html
+*.o
+*.swp
+cctools.test.log
+configure.rerun
+Makefile.config

@@ -7,12 +7,16 @@ See the file COPYING for details.
 
 #include "copy_stream.h"
 #include "full_io.h"
+#include "create_dir.h"
+#include "stringtools.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define COPY_BUFFER_SIZE 65536
 
@@ -131,6 +135,27 @@ int copy_fd_to_stream(int fd, FILE * output)
 	}
 }
 
+int copy_buffer_to_stream(char * buffer, FILE * output, int buffer_size)
+{
+	int actual_write = 0;
+	int total = 0;
+
+	while(total < buffer_size)
+	{
+		actual_write = full_fwrite(output, buffer, buffer_size);
+		if(actual_write < 1)
+			total = -1;
+			break;
+		total += actual_write;
+	}
+
+	if(actual_write < 0 && total == 0) {
+		return -1;
+	} else {
+		return total;
+	}
+}
+
 static int keepgoing = 0;
 
 static void stop_working(int sig)
@@ -138,7 +163,9 @@ static void stop_working(int sig)
 	keepgoing = 0;
 }
 
-static void *install_handler(int sig, void (*handler) (int sig))
+
+//return type is void (*fn)(int)
+static void (*install_handler(int sig, void (*handler)(int)))(int)
 {
 	struct sigaction s, olds;
 	s.sa_handler = handler;
@@ -192,4 +219,61 @@ void copy_fd_pair(int leftin, int leftout, int rightin, int rightout)
 
 	install_handler(SIGTERM, old_sigterm);
 	install_handler(SIGTERM, old_sigchld);
+}
+
+int copy_file_to_file(const char *input, const char *output)
+{
+	int count;
+	struct stat st;
+	stat(input, &st);
+
+	FILE *in, *out;
+
+	in  = fopen(input, "r");
+	if(!in)
+		return -1;
+	
+	char out_dir[COPY_BUFFER_SIZE];
+	string_dirname(output, out_dir);
+	create_dir(out_dir, st.st_mode);
+
+	out = fopen(output, "w");
+	if(!out)
+		return -1;
+
+	count = copy_stream_to_stream(in, out);
+	fflush(out);
+
+	fclose(in);
+	fclose(out);
+	
+	chmod(output, st.st_mode);
+	return count;	
+}
+
+int copy_file_to_buffer(const char *filename, char **buffer)
+{
+	FILE *file = fopen(filename,"r");
+	if(!file) return -1;
+
+	fseek(file,0,SEEK_END);
+	long length = ftell(file);
+	fseek(file,0,SEEK_SET);
+
+	*buffer = malloc(length+1);
+
+	if(!*buffer) {
+		fclose(file);
+		return -1;
+	}
+
+	int count = full_fread(file, *buffer, length);
+    (*buffer)[count] = 0;
+
+	fclose(file);
+
+    if(count < length)
+      return -1;
+
+	return count;
 }

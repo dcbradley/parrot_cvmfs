@@ -158,7 +158,7 @@ size_t cfs_fread(void *ptr, size_t size, size_t nitems, CHIRP_FILE * file)
 		if(t == -1 || t == 0)
 			return nitems_read;
 		file->offset += t;
-		ptr += size;
+		ptr = (char *) ptr + size;   //Previously void arithmetic!
 		nitems_read++;
 	}
 	return nitems_read;
@@ -407,7 +407,7 @@ INT64_T cfs_basic_putfile(const char *path, struct link * link, INT64_T length, 
 
 		while(length > 0) {
 			INT64_T ractual, wactual;
-			INT64_T chunk = MIN(sizeof(buffer), length);
+			INT64_T chunk = MIN((int) sizeof(buffer), length);
 
 			ractual = link_read(link, buffer, chunk, stoptime);
 			if(ractual <= 0)
@@ -462,7 +462,7 @@ INT64_T cfs_basic_getfile(const char *path, struct link * link, time_t stoptime)
 		link_putfstring(link, "%lld\n", stoptime, length);
 
 		while(length > 0) {
-			INT64_T chunk = MIN(sizeof(buffer), length);
+			INT64_T chunk = MIN((int) sizeof(buffer), length);
 
 			ractual = cfs->pread(fd,buffer,chunk,total);
 			if(ractual <= 0)
@@ -512,7 +512,7 @@ INT64_T cfs_basic_md5(const char *path, unsigned char digest[16])
 		md5_init(&ctx);
 
 		while(length > 0) {
-			INT64_T chunk = MIN(sizeof(buffer), length);
+			INT64_T chunk = MIN((int) sizeof(buffer), length);
 
 			ractual = cfs->pread(fd,buffer,chunk,total);
 			if(ractual <= 0) break;

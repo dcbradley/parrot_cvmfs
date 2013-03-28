@@ -1,4 +1,4 @@
-## @package WorkQueuePython
+\## @package WorkQueuePython
 #
 # Python Work Queue bindings.
 #
@@ -543,6 +543,23 @@ class WorkQueue(_object):
         return work_queue_specify_master_mode(self._work_queue, mode)
 
     ##
+    # Specify a log file that records the states of connected workers and submitted tasks. 
+    #
+    # @param self     Reference to the current work queue object.
+    # @param logfile  Filename. 
+    def specify_log(self, logfile):
+        return work_queue_specify_log(self._work_queue, logfile)
+    
+    ##
+    # Add a mandatory password that each worker must present.
+    #
+    # @param self      Reference to the current work queue object.
+    # @param password  The password.
+
+    def specify_password_file(self, password):
+        return work_queue_specify_password(self._work_queue, password)
+    
+    ##
     # Cancel task identified by its taskid and remove from the given queue. 
     #
     # @param self   Reference to the current work queue object.
@@ -567,6 +584,24 @@ class WorkQueue(_object):
     # @param n      The number to shutdown.  To shut down all workers, specify "0".
     def shutdown_workers(self, n):
         return work_queue_shut_down_workers(self._work_queue, n)
+
+    ##
+    # Change keepalive interval for a given queue.
+    #
+    # @param self     Reference to the current work queue object.
+    # @param interval Minimum number of seconds to wait before sending new keepalive
+    #                 checks to workers.
+    def specify_keepalive_interval(self, interval):
+        return work_queue_specify_keepalive_interval(self._work_queue, interval)
+
+    ##
+    # Change keepalive timeout for a given queue.
+    #
+    # @param self     Reference to the current work queue object.
+    # @param timeout  Minimum number of seconds to wait for a keepalive response
+    #                 from worker before marking it as dead.
+    def specify_keepalive_timeout(self, timeout):
+        return work_queue_specify_keepalive_timeout(self._work_queue, timeout)
 
     ##
     # Submit a task to the queue.

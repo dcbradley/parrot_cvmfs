@@ -5,6 +5,7 @@ See the file COPYING for details.
 */
 
 #include "macros.h"
+#include "chirp_acl.h"
 #include "chirp_alloc.h"
 #include "chirp_protocol.h"
 #include "chirp_filesystem.h"
@@ -18,19 +19,25 @@ See the file COPYING for details.
 #include "delete_dir.h"
 #include "debug.h"
 
-#include <assert.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+
+#include <dirent.h>
+#include <fnmatch.h>
+
+#include <assert.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static struct hash_table *alloc_table = 0;
 static struct hash_table *root_table = 0;
 static struct itable *fd_table = 0;
 static int recovery_in_progress = 0;
 static int alloc_enabled = 0;
+
+extern char *chirp_root_path;
 
 struct alloc_state {
 	FILE *file;
@@ -97,7 +104,7 @@ static struct alloc_state *alloc_state_load(const char *path)
 		}
 	}
 
-	fscanf(s->file, "%lld %lld", &s->size, &s->inuse);
+	fscanf(s->file, "%" SCNd64 " %" SCNd64, &s->size, &s->inuse);
 
 	s->dirty = 0;
 
@@ -122,7 +129,7 @@ static void alloc_state_save(const char *path, struct alloc_state *s)
 	if(s->dirty) {
 		ftruncate(fileno(s->file), 0);
 		fseek(s->file, 0, SEEK_SET);
-		fprintf(s->file, "%lld\n%lld\n", s->size, s->inuse);
+		fprintf(s->file, "%" PRId64 "\n%" PRId64 "\n", s->size, s->inuse);
 	}
 	fclose(s->file);
 	free(s);
@@ -135,7 +142,7 @@ static int alloc_state_create(const char *path, INT64_T size)
 	sprintf(statepath, "%s/.__alloc", path);
 	file = fopen(statepath, "w");
 	if(file) {
-		fprintf(file, "%lld 0\n", size);
+		fprintf(file, "%" PRId64 " 0\n", size);
 		fclose(file);
 		return 1;
 	} else {
@@ -355,6 +362,11 @@ time_t chirp_alloc_last_flush_time()
 	return last_flush_time;
 }
 
+INT64_T chirp_alloc_search(const char *subject, const char *dir, const char *patt, int flags, struct link *l, time_t stoptime)
+{
+	return cfs->search(subject, dir, patt, flags, l, stoptime);
+}
+
 INT64_T chirp_alloc_open(const char *path, INT64_T flags, INT64_T mode)
 {
 	struct alloc_state *a;
@@ -539,7 +551,7 @@ struct chirp_dirent * chirp_alloc_readdir( struct chirp_dir *dir )
 
 void chirp_alloc_closedir( struct chirp_dir *dir )
 {
-	return cfs->closedir(dir);
+	cfs->closedir(dir);
 }
 
 INT64_T chirp_alloc_getfile(const char *path, struct link * link, time_t stoptime)
@@ -975,6 +987,25 @@ INT64_T chirp_alloc_mkalloc(const char *path, INT64_T size, INT64_T mode)
 	}
 
 	return result;
+}
+
+char *chirp_stat_string(struct chirp_stat *info)
+{
+	static char line[CHIRP_LINE_MAX];
+
+	sprintf(line, "%" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 ,  info->cst_dev,  info->cst_ino,  info->cst_mode,  info->cst_nlink,  info->cst_uid,  info->cst_gid,
+		 info->cst_rdev,  info->cst_size,  info->cst_blksize,  info->cst_blocks,  info->cst_atime,  info->cst_mtime,  info->cst_ctime);
+
+	return line;
+}
+
+char *chirp_statfs_string(struct chirp_statfs *info)
+{
+	static char line[CHIRP_LINE_MAX];
+
+	sprintf(line, "%" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 ,  info->f_type,  info->f_bsize,  info->f_blocks,  info->f_bfree,  info->f_bavail,  info->f_files,  info->f_ffree);
+
+	return line;
 }
 
 INT64_T chirp_alloc_getxattr (const char *path, const char *name, void *data, size_t size)

@@ -1008,12 +1008,12 @@ static void decode_syscall( struct pfs_process *p, INT64_T entering )
 						child_signal = args[0]&0xff;
 						clone_files = args[0]&CLONE_FILES;
 					}
-                                        pid_t notify_parent;
-                                        if(args[0]&(CLONE_PARENT|CLONE_THREAD)) {
-                                                notify_parent = p->ppid;
-                                        } else {
-                                                notify_parent = p->pid;
-                                        }
+					pid_t notify_parent;
+					if(args[0]&(CLONE_PARENT|CLONE_THREAD)) {
+						notify_parent = p->ppid;
+					} else {
+						notify_parent = p->pid;
+					}
 					child = pfs_process_create(childpid,p->pid,notify_parent,clone_files,child_signal);
 					child->syscall_result = 0;
 					if(args[0]&CLONE_THREAD) child->tgid = p->tgid;
@@ -2264,7 +2264,7 @@ static void decode_syscall( struct pfs_process *p, INT64_T entering )
 			if(entering) {
 				debug(D_PROCESS,"%s %d %d %d",tracer_syscall64_name(p->syscall),args[0],args[1],args[2]);
 				p->syscall_result = pfs_process_raise(args[0],args[1],0);
-				divert_to_dummy(p,p->syscall_result);
+				if (p->syscall_result == -1) p->syscall_result = -errno;
 			}
 			break;
 
@@ -2272,7 +2272,7 @@ static void decode_syscall( struct pfs_process *p, INT64_T entering )
 			if(entering) {
 				debug(D_PROCESS,"tgkill %d %d %d",args[0],args[1],args[2]);
 				p->syscall_result = pfs_process_raise(args[1],args[2],0);
-				divert_to_dummy(p,p->syscall_result);
+				if (p->syscall_result == -1) p->syscall_result = -errno;
 			}
 			break;
 
@@ -2386,6 +2386,35 @@ static void decode_syscall( struct pfs_process *p, INT64_T entering )
 				divert_to_dummy(p,p->syscall_result);
 			}
 			break;
+
+                case SYSCALL64_search:
+                        if (entering) {
+				char location[PFS_PATH_MAX];
+                                tracer_copy_in(p->tracer, location, POINTER(args[5]), sizeof(location));
+				debug(D_SYSCALL, "search %s", location);
+
+                                char path[2*PFS_PATH_MAX];
+                                char pattern[PFS_PATH_MAX];
+                                int flags = args[2];
+                                int buffer_length = args[4];
+                                char *buffer = (char*) malloc(buffer_length);
+
+                                if (!buffer) {
+                                        p->syscall_result = -ENOMEM;
+                                        break;
+                                }
+
+                                size_t i = 0;
+                                tracer_copy_in_string(p->tracer, path, POINTER(args[0]), sizeof(path));
+                                tracer_copy_in_string(p->tracer, pattern, POINTER(args[1]), sizeof(pattern));
+                                p->syscall_result = pfs_search(path, pattern, flags, buffer, buffer_length, &i);
+				
+				if (i==0) *buffer = '\0';
+
+                                tracer_copy_out(p->tracer, buffer, POINTER(args[3]), i+1); 
+                                divert_to_dummy(p,p->syscall_result);
+                        }
+                        break;
 
 		case SYSCALL64_parrot_setacl:
 			if(entering) {
