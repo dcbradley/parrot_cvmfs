@@ -7,11 +7,11 @@ made to code in cvmfs are subject to the license in cvmfs/COPYING
 code in cctools are subject to the license in cctools/COPYING (GPLv2).
 
 The CVMFS and parrot code was checked out from the project
-subversion repositories and was copied into the 'upstream' branch.
+github repositories and was copied into the 'upstream' branch.
 The following versions are currently used:
 
 cvmfs git repo 6455bfa65df0 (2.1 dev branch)
-cctools trunk r2147
+cctools git repo 3dafd2144ff3f53e
 
 To see the development that has been done, compare the cvmfs2_1
 branch to the upstream cvmfs2_1 branch:
