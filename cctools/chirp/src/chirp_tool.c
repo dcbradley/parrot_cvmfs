@@ -73,7 +73,15 @@ struct command {
 	char *help;
 	  INT64_T(*handler) (int argc, char **argv);
 };
-static struct command list[];
+
+/* Standard C does not let:
+   static struct command list[];
+   Thus, we have to write the size of the array instead of the
+   array being computed automatically when initialized below.
+   Hopefully we do not have commands to chirp that often.
+*/
+
+static struct command list[50];
 
 static void acl_simple(char **acl)
 {
@@ -453,7 +461,7 @@ static void long_ls_callback(const char *name, struct chirp_stat *info, void *ar
 		strftime(timestr, sizeof(timestr), "%b %d %H:%M", localtime(&t));
 	}
 
-	printf("%c%c%c%c%c%c%c%c%c%c %4lld %8lld %8lld %8lld %s %s\n", S_ISDIR(info->cst_mode) ? 'd' : '-', info->cst_mode & 0400 ? 'r' : '-', info->cst_mode & 0200 ? 'w' : '-', info->cst_mode & 0100 ? 'x' : '-', info->cst_mode & 0040 ? 'r' : '-',
+	printf("%c%c%c%c%c%c%c%c%c%c %4" PRId64 " %8" PRId64 " %8" PRId64 " %8" PRId64 " %s %s\n", S_ISDIR(info->cst_mode) ? 'd' : '-', info->cst_mode & 0400 ? 'r' : '-', info->cst_mode & 0200 ? 'w' : '-', info->cst_mode & 0100 ? 'x' : '-', info->cst_mode & 0040 ? 'r' : '-',
 	       info->cst_mode & 0020 ? 'w' : '-', info->cst_mode & 0010 ? 'x' : '-', info->cst_mode & 0004 ? 'r' : '-', info->cst_mode & 0002 ? 'w' : '-', info->cst_mode & 0001 ? 'x' : '-', info->cst_nlink, info->cst_uid, info->cst_gid, info->cst_size,
 	       timestr, name);
 }
@@ -570,16 +578,16 @@ static INT64_T do_stat(int argc, char **argv)
 	if(chirp_reli_stat(current_host, full_path, &info, stoptime) < 0) {
 		return -1;
 	} else {
-		printf("device:  %lld\n", info.cst_dev);
-		printf("inode:   %lld\n", info.cst_ino);
-		printf("mode:    %04llo\n", info.cst_mode);
-		printf("nlink:   %lld\n", info.cst_nlink);
-		printf("uid:     %lld\n", info.cst_uid);
-		printf("gid:     %lld\n", info.cst_gid);
-		printf("rdevice: %lld\n", info.cst_rdev);
-		printf("size:    %lld\n", info.cst_size);
-		printf("blksize: %lld\n", info.cst_blksize);
-		printf("blocks:  %lld\n", info.cst_blocks);
+		printf("device:  %" PRId64 "\n", info.cst_dev);
+		printf("inode:   %" PRId64 "\n", info.cst_ino);
+		printf("mode:    %04" PRIu64 "\n", info.cst_mode);
+		printf("nlink:   %" PRId64 "\n", info.cst_nlink);
+		printf("uid:     %" PRId64 "\n", info.cst_uid);
+		printf("gid:     %" PRId64 "\n", info.cst_gid);
+		printf("rdevice: %" PRId64 "\n", info.cst_rdev);
+		printf("size:    %" PRId64 "\n", info.cst_size);
+		printf("blksize: %" PRId64 "\n", info.cst_blksize);
+		printf("blocks:  %" PRId64 "\n", info.cst_blocks);
 		t = info.cst_atime;
 		printf("atime:   %s", ctime(&t));
 		t = info.cst_mtime;
@@ -754,9 +762,9 @@ static INT64_T do_audit(int argc, char **argv)
 			printf("   FILES     DIRS      DATA OWNER\n");
 		for(i = 0; i < result; i++) {
 			if(raw_mode) {
-				printf("%lld %lld %lld %s\n", list[i].nfiles, list[i].ndirs, list[i].nbytes, list[i].name);
+				printf("%" PRId64 " %" PRId64 " %" PRId64 " %s\n", list[i].nfiles, list[i].ndirs, list[i].nbytes, list[i].name);
 			} else {
-				printf("%8lld %8lld %8sB %s\n", list[i].nfiles, list[i].ndirs, string_metric(list[i].nbytes, -1, 0), list[i].name);
+				printf("%8" PRId64 " %8" PRId64 " %8sB %s\n", list[i].nfiles, list[i].ndirs, string_metric(list[i].nbytes, -1, 0), list[i].name);
 			}
 		}
 		free(list);
@@ -809,7 +817,7 @@ static INT64_T do_thirdput(int argc, char **argv)
 		stop++;
 
 	if(result > 0) {
-		printf("%lld bytes transferred in %d seconds ", result, (int) (stop - start));
+		printf("%" PRId64 " bytes transferred in %d seconds ", result, (int) (stop - start));
 		printf("(%.1lfMB/s)\n", result / (double) (stop - start) / 1024.0 / 1024.0);
 	}
 
@@ -892,6 +900,42 @@ static INT64_T do_matrix_delete(int argc, char **argv)
 	return chirp_matrix_delete(current_host, path, stoptime);
 }
 
+static char *strerrsource(int errsource) {
+        switch (errsource) {
+                case CHIRP_SEARCH_ERR_OPEN: return "Open";
+                case CHIRP_SEARCH_ERR_READ: return "Read";
+                case CHIRP_SEARCH_ERR_CLOSE: return "Close";
+                case CHIRP_SEARCH_ERR_STAT: return "Stat";
+                default: return "Unknown";
+        }
+}
+
+static INT64_T do_search(int argc, char **argv)
+{	
+	int flags = CHIRP_SEARCH_METADATA|CHIRP_SEARCH_INCLUDEROOT|CHIRP_SEARCH_PERIOD;
+	CHIRP_SEARCH *s = chirp_reli_opensearch(current_host, argv[1], argv[2], flags, stoptime);
+	struct chirp_searchent *res;
+
+        while ((res = chirp_client_readsearch(s)) != NULL) {
+
+                if (res->err) {
+                        printf("%s error on %s: %s\n", strerrsource(res->errsource), res->path, strerror(res->err));
+                        continue;
+                }
+
+                printf("%-30s", res->path);
+
+                if (flags & CHIRP_SEARCH_METADATA)
+                        printf("\t" INT64_FORMAT "\t" INT64_FORMAT "\n", res->info->cst_size, res->info->cst_ino);
+                else
+                        printf("\n");
+        }
+
+        chirp_client_closesearch(s);
+
+	return 0;
+}
+
 static INT64_T do_xattr_get(int argc, char **argv)
 {
 	char full_path[CHIRP_PATH_MAX];
@@ -948,6 +992,8 @@ static INT64_T do_xattr_set(int argc, char **argv)
 	}
 }
 
+/* If adding a command below, remember to modify the size of
+ * struct command list[] at the top of this file. */
 static struct command list[] = {
 	{"audit", 1, 0, 1, "[-r]", do_audit},
 	{"cat", 1, 1, 100, "<file> [file2] [file3] ...", do_cat},
@@ -981,6 +1027,7 @@ static struct command list[] = {
 	{"resetacl", 1, 2, 2, "<remotepath> <rwldax>", do_resetacl},
 	{"rm", 1, 1, 1, "<file>", do_rm},
 	{"rmdir", 1, 1, 1, "<dir>", do_rmdir},
+	{"search", 1, 2, 2, "<directory> <pattern>", do_search},
 	{"setacl", 1, 3, 3, "<remotepath> <user> <rwldax>", do_setacl},
 	{"setrep", 1, 2, 2, "<path> <nreps>", do_setrep},
 	{"stat", 1, 1, 1, "<file>", do_stat},
@@ -997,7 +1044,7 @@ static struct command list[] = {
 	{"xattr_get", 1, 2, 2, "<file> <attribute>", do_xattr_get},
 	{"xattr_list", 1, 1, 1, "<file>", do_xattr_list},
 	{"xattr_set", 1, 2, 3, "<file> <attribute> [value]", do_xattr_set},
-	{0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0},
 };
 
 static int process_command(int argc, char **argv)

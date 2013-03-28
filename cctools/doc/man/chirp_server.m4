@@ -47,14 +47,14 @@ OPTION_ITEM(-R)Read-only mode.
 OPTION_PAIR(-s,time)Abort stalled operations after this long. (default is 3600s)
 OPTION_PAIR(-t,time)Disconnect idle clients after this time. (default is 60s)
 OPTION_PAIR(-T,time)Maximum time to cache group information. (default is 900s)
-OPTION_PAIR(-u,host)Send status updates to this host. (default is chirp.cse.nd.edu)
+OPTION_PAIR(-u,host)Send status updates to this host. (default is catalog.cse.nd.edu)
 OPTION_PAIR(-U,time)Send status updates at this interval. (default is 5m)
 OPTION_ITEM(-v)Show version info.
 OPTION_PAIR(-w,name)The name of this server's owner.  (default is username)
 OPTION_PAIR(-W,file)Use alternate password file for unix authentication
 OPTION_PAIR(-y,dir)Location of transient data (default is pwd).
 OPTION_PAIR(-z,time)Set max timeout for unix filesystem authentication. (default is 5s)
-OPTION_PAIR(-Z,file)Select port at random and write to this file.  (default is disabled)
+OPTION_PAIR(-Z,file)Select port at random and write it to this file.  (default is disabled)
 OPTIONS_END
 
 SECTION(ENVIRONMENT VARIABLES)

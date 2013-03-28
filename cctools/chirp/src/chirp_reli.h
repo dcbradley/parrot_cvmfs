@@ -36,6 +36,7 @@ The caller may invoke <tt>strerror(errno)</tt> to generate a human-readable stri
 
 #include <sys/types.h>
 #include <stdio.h>
+#include <dirent.h>
 
 /** Creates or opens a file in preparation for I/O.
 @param host The name and port of the Chirp server to access.
@@ -268,6 +269,18 @@ To put an entire directory tree, see @ref chirp_recursive_put instead.
 
 INT64_T chirp_reli_putfile_buffer(const char *host, const char *path, const char *buffer, INT64_T mode, INT64_T length, time_t stoptime);
 
+/** Open a file search stream
+Performs a search operation on the Chirp server and stores its results to be read via readsearch
+@param host The name and port of the Chirp server to access.
+@param paths The pathnames of the directories to search.
+@param pattern The pattern to search for 
+@param flags Bit flags controlling various aspects of the search
+@param stoptime The absolute time at which to abort.
+@return On success, returns greater than or equal to zero.  On failure, returns less than zero  and sets errno.
+*/
+
+CHIRP_SEARCH *chirp_reli_opensearch( const char *host, const char *paths, const char *pattern, int flags, time_t stoptime );
+
 /** Get a detailed directory listing.
 Gets a detailed directory listing from a Chirp server, and then calls the callback once for each element in the directory.
 @param host The name and port of the Chirp server to access.
@@ -292,18 +305,6 @@ Gets a simple directory listing from a Chirp server, and then calls the callback
 */
 
 INT64_T chirp_reli_getdir(const char *host, const char *path, chirp_dir_t callback, void *arg, time_t stoptime);
-
-/** Get an access control list.
-Gets an access control list from a Chirp server, and then calls the callback once for each element in the list.
-  This is a low-level function, you may find @ref chirp_reli_opendir easier to use.
-@param host The name and port of the Chirp server to access.
-@param path The pathname of the directory to access.
-@param callback The function to be called for each element in the listing.
-@param arg An optional convenience pointer that will be passed to the callback function.
-@param stoptime The absolute time at which to abort.
-@see chirp_reli_opendir
-@return On success, returns greater than or equal to zero.  On failure, returns less than zero  and sets errno.
-*/
 
 /**
 Open a directory for listing.  This function returns a pointer to an opened directory.

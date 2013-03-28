@@ -8,6 +8,7 @@ See the file COPYING for details.
 #include "stringtools.h"
 #include "cctools.h"
 #include "debug.h"
+#include "random_init.h"
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -45,8 +46,8 @@ static pid_t pid;
 static char **program_argv;
 static time_t program_mtime;
 static time_t program_ctime;
-static int min_wait_time = 10;
-static int max_wait_time = 600;
+static unsigned int min_wait_time = 10;
+static unsigned int max_wait_time = 600;
 static int start_interval = 60;
 static int stop_interval = 60;
 static int check_interval = 3600;
@@ -197,7 +198,7 @@ int main(int argc, char *argv[])
 {
 	char c;
 
-	srand(time(0));
+	random_init();
 
 	install_handler(SIGINT, handle_signal);
 	install_handler(SIGTERM, handle_signal);
@@ -311,7 +312,7 @@ int main(int argc, char *argv[])
 				debug(D_DEBUG, "all done");
 				exit(0);
 			} else {
-				unsigned wait_time;
+				unsigned int wait_time;
 				int i;
 
 				wait_time = min_wait_time;
@@ -321,7 +322,7 @@ int main(int argc, char *argv[])
 				if(wait_time > max_wait_time || wait_time < min_wait_time) {
 					wait_time = max_wait_time;
 				}
-				if(time_in_state >= wait_time) {
+				if(time_in_state >= (int) wait_time) {
 					change_state(STATE_READY);
 				}
 			}

@@ -21,6 +21,7 @@ The -X option will delete the directory from all of the named hosts.
 #include "stringtools.h"
 #include "timestamp.h"
 #include "macros.h"
+#include "random_init.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -202,13 +203,9 @@ int main(int argc, char *argv[])
 	int server_count = 0;
 	int cluster_count = 0;
 
-	srand(time(0));
+	random_init();
 
 	debug_config(argv[0]);
-
-	debug(D_CHIRP, "HELLO");
-
-	//start_time = time(0);
 
 	while(((c = getopt(argc, argv, "a:d:DF:i:N:p:Rt:T:vXYh")) != (char) -1)) {
 		switch (c) {
@@ -293,7 +290,7 @@ int main(int argc, char *argv[])
 
 	result = chirp_reli_stat(sourcehost, sourcepath, &buf, time(0) + 20);
 	if(result < 0) {
-		printf("%s %s %lld %i %s chirp stat failed\n", sourcehost, sourcepath, result, errno, strerror(errno));
+		printf("%s %s %" PRId64 " %i %s chirp stat failed\n", sourcehost, sourcepath, result, errno, strerror(errno));
 		if(errno == 2)
 			return 0;
 	}
@@ -514,9 +511,6 @@ int main(int argc, char *argv[])
 	if(out != NULL)
 		fclose(out);
 
-
-
-
 	targets = malloc(sizeof(struct target_info) * ntargets);
 	servers = malloc(sizeof(struct server_info) * 400);
 
@@ -541,7 +535,7 @@ int main(int argc, char *argv[])
 
 			if(strlen(temp) > 10)
 				cluster_count = cluster_count + 1;
-			for(i = 0; i < strlen(temp); i++) {
+			for(i = 0; i < (int) strlen(temp); i++) {
 				if((test != 0) && (temp[i] != '_') && (temp[i] != ' ')) {
 					t_name[name_count] = temp[i];
 					name_count++;

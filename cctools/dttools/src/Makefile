@@ -43,6 +43,7 @@ SOURCES = auth.c  \
           get_canonical_path.c  \
           get_line.c  \
           getopt.c  \
+          getopt_aux.c  \
           hdfs_library.c  \
           hash_cache.c  \
           hash_table.c  \
@@ -50,6 +51,7 @@ SOURCES = auth.c  \
           http_query.c  \
           itable.c  \
           link.c  \
+          link_auth.c  \
           link_nvpair.c \
           list.c  \
           load_average.c  \
@@ -62,6 +64,8 @@ SOURCES = auth.c  \
           password_cache.c  \
           preadwrite.c  \
           process.c  \
+	  random_init.c \
+          rmonitor_hooks.c \
           sha1.c  \
           sleeptools.c  \
           sort_dir.c  \
@@ -78,7 +82,6 @@ SOURCES = auth.c  \
           xxmalloc.c
 
 EXTRA_HEADERS = batch_job_internal.h \
-                int_sizes.h  \
                 macros.h
 PUBLIC_HEADERS = auth.h  \
                  auth_address.h  \
@@ -91,6 +94,7 @@ PUBLIC_HEADERS = auth.h  \
                  batch_job.h  \
                  debug.h  \
                  int_sizes.h  \
+                 rmonitor_hooks.h \
                  timestamp.h  \
                  work_queue.h
 
@@ -103,7 +107,7 @@ ifeq (${CCTOOLS_USE_MPI},true)
 	PROGRAMS += mpi_queue_worker
 endif
 
-TEST_PROGRAMS = work_queue_example microbench hmac_test chunk_test multirun
+TEST_PROGRAMS = work_queue_example work_queue_workload_simulator microbench hmac_test chunk_test multirun
 PROGRAM_SOURCES = ${PROGRAMS:%=%.c} ${TEST_PROGRAMS:%=%.c}
 SCRIPTS = condor_submit_workers sge_submit_workers torque_submit_workers pbs_submit_workers ec2_submit_workers ec2_remove_workers
 CYGWINLIB = cygwin1.dll cyggcc_s-1.dll cygintl-8.dll cygreadline7.dll cygncursesw-10.dll cygiconv-2.dll cygattr-1.dll sh.exe
@@ -137,6 +141,9 @@ mpi_queue_worker: mpi_queue_worker.o libdttools.a
 work_queue_example: work_queue_example.c libdttools.a
 	${CCTOOLS_LD} $^ ${CCTOOLS_INTERNAL_LDFLAGS} -o $@
 
+work_queue_workload_simulator: work_queue_workload_simulator.o libdttools.a
+	${CCTOOLS_LD} $^ ${CCTOOLS_INTERNAL_LDFLAGS} -o $@
+
 work_queue_status: work_queue_status.c libdttools.a
 	${CCTOOLS_LD} $^ ${CCTOOLS_INTERNAL_LDFLAGS} -o $@
 
@@ -153,18 +160,10 @@ libdttools.a: ${OBJECTS}
 	${CCTOOLS_AR} rv $@ $^
 	ranlib $@
 
-${SOURCES} ${PROGRAM_SOURCES} : int_sizes.h
-
-int_sizes.h: make_int_sizes
-	./$< > $@
-
-make_int_sizes: make_int_sizes.o
-	${CCTOOLS_LD} $^ -o $@ ${CCTOOLS_INTERNAL_LDFLAGS}
-
 test: all
 
 clean:
-	rm -f core *~ *.o *.os *.so libdttools.a make_int_sizes int_sizes.h large_chunk.txt $(PROGRAMS)
+	rm -f core *~ *.o *.os *.so libdttools.a large_chunk.txt $(PROGRAMS)
 
 install: all
 	mkdir -p ${CCTOOLS_INSTALL_DIR}/bin
